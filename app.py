@@ -12,19 +12,17 @@ def load_data(file):
             data[tab].columns = data[tab].columns.str.strip()
         return data
     except Exception as e:
-        st.error(f"Erro ao carregar abas. Verifique os nomes GK, DF, MF e FW. Erro: {e}")
+        st.error(f"Erro ao carregar abas: {e}")
         return None
 
 def format_func(row):
     if row is None: return "Selecione ou digite o nome..."
-    # Formatação para exibir bilhões de forma legível
-    valor = row['Market Value (M€)']
-    return f"{row['Name']} ({row['Reg. Pos.']}) - OV: {row['Overall']} - €{valor:,.0f}"
+    return f"{row['Name']} ({row['Reg. Pos.']}) - OV: {row['Overall']} - €{row['Market Value (M€)']}"
 
 st.title("⚽ Seleção de Elenco - PES 2013")
 
-# Ajuste do limite para 4 bilhões
-ORCAMENTO_MAX = 4000000000.0 
+# Ajuste do limite para 5.000 conforme solicitado
+ORCAMENTO_MAX = 5000.0 
 arquivo_alvo = "jogadores.xlsx"
 
 uploaded_file = st.sidebar.file_uploader("Upload da Planilha", type=["xlsx"])
@@ -40,18 +38,26 @@ if data:
     if 'escolhas' not in st.session_state:
         st.session_state.escolhas = {}
 
+    # Lista de IDs (nomes) já selecionados para exclusão mútua
+    selecionados_nomes = [v['Name'] for k, v in st.session_state.escolhas.items() if v is not None]
+
     # Cálculo do custo e saldo
     custo_atual = sum([v['Market Value (M€)'] for v in st.session_state.escolhas.values() if v is not None])
     saldo = ORCAMENTO_MAX - custo_atual
 
     def seletor_inteligente(label, df, key_id):
-        # Regra 3: Filtrar para aparecer só os que cabem no orçamento restante
-        # Mantemos o já selecionado na lista para evitar que o campo fique em branco ao atingir o limite
-        escolha_atual_val = st.session_state.escolhas.get(key_id, {}).get('Market Value (M€)', 0) if st.session_state.escolhas.get(key_id) else 0
+        escolha_atual = st.session_state.escolhas.get(key_id)
+        nome_atual = escolha_atual['Name'] if escolha_atual else None
         
-        disponiveis = df[df['Market Value (M€)'] <= (saldo + escolha_atual_val)]
+        # 1. Filtra orçamento
+        custo_liberado = escolha_atual['Market Value (M€)'] if escolha_atual else 0
+        df_filtrado = df[df['Market Value (M€)'] <= (saldo + custo_liberado)]
         
-        opcoes = [None] + disponiveis.sort_values('Overall', ascending=False).to_dict('records')
+        # 2. Retira jogadores já escolhidos em outros botões (exceto o próprio deste botão)
+        outros_selecionados = [n for n in selecionados_nomes if n != nome_atual]
+        df_filtrado = df_filtrado[~df_filtrado['Name'].isin(outros_selecionados)]
+        
+        opcoes = [None] + df_filtrado.sort_values('Overall', ascending=False).to_dict('records')
         escolha = st.selectbox(label, opcoes, format_func=format_func, key=key_id)
         st.session_state.escolhas[key_id] = escolha
         return escolha
@@ -62,7 +68,7 @@ if data:
     with col1:
         st.subheader(f"Titulares - {esquema}")
         g = seletor_inteligente("🧤 Goleiro Titular", data['GK'], "gk_t")
-        if g: elenco_final.append({**g, "Tipo": "Titular"})
+        if g: elenco_final.append({**g, "Escalação": "Titular"})
         
         for pos, n, aba in [("Defesa", n_def, 'DF'), ("Meio", n_mei, 'MF'), ("Ataque", n_ata, 'FW')]:
             st.write(f"**{pos}**")
@@ -70,39 +76,38 @@ if data:
             for i in range(n):
                 with cols[i%2]:
                     sel = seletor_inteligente(f"{pos} {i+1}", data[aba], f"{aba}_{i}")
-                    if sel: elenco_final.append({**sel, "Tipo": "Titular"})
+                    if sel: elenco_final.append({**sel, "Escalação": "Titular"})
 
     with col2:
         st.subheader("📋 Reservas")
         gr = seletor_inteligente("Goleiro Reserva", data['GK'], "gk_r")
-        if gr: elenco_final.append({**gr, "Tipo": "Reserva"})
+        if gr: elenco_final.append({**gr, "Escalação": "Reserva"})
         
-        todos = pd.concat([data['DF'], data['MF'], data['FW']])
+        todos_res = pd.concat([data['DF'], data['MF'], data['FW']])
         for i in range(7):
-            r = seletor_inteligente(f"Reserva {i+2}", todos, f"res_{i}")
-            if r: elenco_final.append({**r, "Tipo": "Reserva"})
+            r = seletor_inteligente(f"Reserva {i+2}", todos_res, f"res_{i}")
+            if r: elenco_final.append({**r, "Escalação": "Reserva"})
 
     # Barra Lateral
     st.sidebar.markdown("---")
-    st.sidebar.metric("Orçamento Usado", f"€{custo_atual:,.0f}", f"Saldo: €{saldo:,.0f}")
+    st.sidebar.metric("Orçamento Usado", f"€{custo_atual:.0f}", f"Saldo: €{saldo:.0f}")
     
     if elenco_final:
-        df_f = pd.DataFrame(elenco_final)
-        media_ov = df_f['Overall'].mean()
+        df_export = pd.DataFrame(elenco_final)
+        media_ov = df_export['Overall'].mean()
         st.sidebar.metric("Média Overall", f"{media_ov:.1f}")
 
         if st.sidebar.button("💾 Exportar Time"):
             output = BytesIO()
             with pd.ExcelWriter(output, engine='openpyxl') as writer:
-                # Regra 1: Cabeçalho com Nome, Custo e Overall
-                info = [
+                # Cabeçalho com informações consolidadas
+                header = [
                     ["NOME DO TIME:", nome_time],
-                    ["CUSTO TOTAL DO TIME:", f"€ {custo_atual:,.0f}"],
-                    ["OVERALL MÉDIO DO TIME:", f"{media_ov:.1f}"],
-                    ["----------------------------------", ""]
+                    ["VALOR TOTAL:", f"€{custo_atual:.0f}"],
+                    ["MÉDIA OVERALL:", f"{media_ov:.1f}"],
+                    ["LIMITE:", f"€{ORCAMENTO_MAX:.0f}"],
+                    ["", ""]
                 ]
-                pd.DataFrame(info).to_excel(writer, index=False, header=False, sheet_name='Escalação')
-                # Lista de jogadores abaixo
-                df_f.to_excel(writer, index=False, startrow=5, sheet_name='Escalação')
-            
-            st.sidebar.download_button("Clique para baixar", output.getvalue(), f"{nome_time}.xlsx")
+                pd.DataFrame(header).to_excel(writer, index=False, header=False, sheet_name='Time')
+                df_export.to_excel(writer, index=False, startrow=5, sheet_name='Time')
+            st.sidebar.download_button("Baixar Arquivo", output.getvalue(), f"{nome_time}.xlsx")
