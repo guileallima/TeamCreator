@@ -1,0 +1,71 @@
+import streamlit as st
+import pandas as pd
+from io import BytesIO
+
+st.set_page_config(page_title="Seleção de Elenco", layout="wide")
+
+def load_data(file):
+    try:
+        tabs = ['goleiros', 'defensores', 'meio campos', 'atacantes']
+        return {tab: pd.read_excel(file, sheet_name=tab) for tab in tabs}
+    except Exception as e:
+        st.error(f"Erro ao ler as abas do Excel: {e}")
+        return None
+
+def format_func(row):
+    return f"{row['Name']} - OV: {row['overall']} - €{row['Market Value (M€)']}M"
+
+st.title("⚽ Seleção de Elenco Profissional")
+
+uploaded_file = st.sidebar.file_uploader("Suba sua planilha Excel", type=["xlsx"])
+
+if uploaded_file is None:
+    try:
+        data = load_data("jogadores.xlsx")
+    except:
+        st.info("Aguardando upload da planilha ou arquivo 'jogadores.xlsx' não encontrado.")
+        st.stop()
+else:
+    data = load_data(uploaded_file)
+
+if data:
+    nome_time = st.sidebar.text_input("Nome do Time", "Meu Time")
+    esquema = st.sidebar.selectbox("Esquema Tático", ["442", "352", "451", "433", "343"])
+    
+    taticas = {"442":(4,4,2), "352":(3,5,2), "451":(4,5,1), "433":(4,3,3), "343":(3,4,3)}
+    n_def, n_mei, n_ata = taticas[esquema]
+
+    elenco = []
+    col1, col2 = st.columns([2, 1])
+
+    with col1:
+        st.subheader(f"Titulares ({esquema})")
+        g = st.selectbox("Goleiro Titular", [None] + data['goleiros'].sort_values('overall', ascending=False).to_dict('records'), format_func=lambda x: format_func(x) if x else "Selecione...")
+        if g: elenco.append({**g, "Tipo": "Titular"})
+        
+        for pos, n, aba in [("Defensor", n_def, 'defensores'), ("Meio", n_mei, 'meio campos'), ("Atacante", n_ata, 'atacantes')]:
+            cols = st.columns(2)
+            for i in range(n):
+                with cols[i%2]:
+                    sel = st.selectbox(f"{pos} {i+1}", [None] + data[aba].sort_values('overall', ascending=False).to_dict('records'), format_func=lambda x: format_func(x) if x else "Selecione...", key=f"{pos}{i}")
+                    if sel: elenco.append({**sel, "Tipo": "Titular"})
+
+    with col2:
+        st.subheader("Reservas")
+        gr = st.selectbox("Goleiro Reserva", [None] + data['goleiros'].sort_values('overall', ascending=False).to_dict('records'), format_func=lambda x: format_func(x) if x else "Selecione...")
+        if gr: elenco.append({**gr, "Tipo": "Reserva"})
+        
+        todos = pd.concat([data['defensores'], data['meio campos'], data['atacantes']])
+        for i in range(7):
+            r = st.selectbox(f"Reserva {i+2}", [None] + todos.sort_values('overall', ascending=False).to_dict('records'), format_func=lambda x: format_func(x) if x else "Selecione...", key=f"res{i}")
+            if r: elenco.append({**r, "Tipo": "Reserva"})
+
+    if elenco:
+        df_f = pd.DataFrame(elenco)
+        st.sidebar.metric("Custo Total", f"€{df_f['Market Value (M€)'].sum():.1f}M")
+        st.sidebar.metric("Média Overall", f"{df_f['overall'].mean():.1f}")
+        
+        out = BytesIO()
+        with pd.ExcelWriter(out, engine='openpyxl') as w:
+            df_f.to_excel(w, index=False)
+        st.sidebar.download_button("💾 Baixar Time", out.getvalue(), f"{nome_time}.xlsx")
