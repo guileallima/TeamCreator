@@ -24,7 +24,7 @@ def format_func(row):
 
 # --- Inicialização ---
 data = load_data()
-ORCAMENTO_MAX = 5000.0
+ORCAMENTO_MAX = 3000.0
 
 if 'escolhas' not in st.session_state:
     st.session_state.escolhas = {}
@@ -114,3 +114,4 @@ if elenco_final:
             pd.DataFrame(resumo).to_excel(wr, index=False, header=False, sheet_name='Escalacao')
             df_f.to_excel(wr, index=False, startrow=5, sheet_name='Escalacao')
         st.sidebar.download_button("Baixar Arquivo", out.getvalue(), f"{nome_time}.xlsx")
+
