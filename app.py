@@ -4,24 +4,24 @@ from io import BytesIO
 
 st.set_page_config(page_title="Seleção de Elenco PES 2013", layout="wide")
 
-# Função de carga simplificada para evitar erros de mapeamento
 def load_data(file):
     try:
-        # Lendo exatamente as abas que você informou
         tabs = ['GK', 'DF', 'MF', 'FW']
-        return {tab: pd.read_excel(file, sheet_name=tab) for tab in tabs}
+        # Lendo o Excel e garantindo que não haja espaços vazios nos nomes das colunas
+        data = {tab: pd.read_excel(file, sheet_name=tab) for tab in tabs}
+        for tab in data:
+            data[tab].columns = data[tab].columns.str.strip()
+        return data
     except Exception as e:
-        st.error(f"Erro ao carregar abas. Verifique se os nomes GK, DF, MF e FW estão corretos. Erro: {e}")
+        st.error(f"Erro ao carregar abas. Verifique os nomes GK, DF, MF e FW. Erro: {e}")
         return None
 
-# Formatação usando os nomes exatos das colunas que você passou
 def format_func(row):
-    if row is None: return "Selecione ou digite o nome..."
+    if row is None: return "Selecione ou digite o nome do craque..."
     return f"{row['Name']} ({row['Reg. Pos.']}) - OV: {row['Overall']} - €{row['Market Value (M€)']}M"
 
 st.title("⚽ Seleção de Elenco - PES 2013")
 
-# Limite de orçamento: 4.0 (Ajuste para 4000000 se sua planilha usar números inteiros)
 ORCAMENTO_MAX = 4.0 
 arquivo_alvo = "jogadores.xlsx"
 
@@ -32,23 +32,20 @@ if data:
     nome_time = st.sidebar.text_input("Nome do Time", "Meu Time PES")
     esquema = st.sidebar.selectbox("Esquema Tático", ["442", "352", "451", "433", "343"])
     
-    # Mapeamento do esquema
     taticas = {"442":(4,4,2), "352":(3,5,2), "451":(4,5,1), "433":(4,3,3), "343":(3,4,3)}
     n_def, n_mei, n_ata = taticas[esquema]
 
     if 'escolhas' not in st.session_state:
         st.session_state.escolhas = {}
 
-    # Cálculo do custo (usando o nome exato da coluna)
+    # Cálculo do custo total sem travar a lista
     custo_atual = sum([v['Market Value (M€)'] for v in st.session_state.escolhas.values() if v is not None])
     saldo = ORCAMENTO_MAX - custo_atual
 
     def seletor_jogador(label, df, key_id):
-        # Filtro: mostra quem cabe no orçamento OU quem já estava selecionado
-        # Adicionei uma margem de segurança para evitar que a lista suma
-        disponiveis = df[df['Market Value (M€)'] <= (saldo + (st.session_state.escolhas.get(key_id, {}).get('Market Value (M€)', 0) if st.session_state.escolhas.get(key_id) else 0))]
+        # LISTA COMPLETA: Sem filtro de orçamento para garantir que todos apareçam
+        opcoes = [None] + df.sort_values('Overall', ascending=False).to_dict('records')
         
-        opcoes = [None] + disponiveis.sort_values('Overall', ascending=False).to_dict('records')
         escolha = st.selectbox(label, opcoes, format_func=format_func, key=key_id)
         st.session_state.escolhas[key_id] = escolha
         return escolha
@@ -79,9 +76,12 @@ if data:
             r = seletor_jogador(f"Reserva {i+2}", todos, f"res_{i}")
             if r: elenco_final.append({**r, "Tipo": "Reserva"})
 
-    # Barra Lateral
+    # Barra Lateral com aviso de orçamento
     st.sidebar.markdown("---")
-    st.sidebar.metric("Orçamento Usado", f"€{custo_atual:.2f}M", f"Saldo: €{saldo:.2f}M")
+    if custo_atual > ORCAMENTO_MAX:
+        st.sidebar.error(f"⚠️ ORÇAMENTO ESTOURADO! €{custo_atual:.2f}M")
+    else:
+        st.sidebar.metric("Orçamento Usado", f"€{custo_atual:.2f}M", f"Saldo: €{saldo:.2f}M")
     
     if elenco_final:
         df_f = pd.DataFrame(elenco_final)
@@ -91,8 +91,8 @@ if data:
         if st.sidebar.button("💾 Exportar Time"):
             output = BytesIO()
             with pd.ExcelWriter(output, engine='openpyxl') as writer:
-                # Cabeçalho customizado
-                info = [["TIME:", nome_time], ["CUSTO:", f"{custo_atual:.2f}"], ["OVERALL:", f"{media_ov:.1f}"], ["", ""]]
-                pd.DataFrame(info).to_excel(writer, index=False, header=False, sheet_name='Time')
-                df_f.to_excel(writer, index=False, startrow=5, sheet_name='Time')
-            st.sidebar.download_button("Clique aqui para baixar", output.getvalue(), f"{nome_time}.xlsx")
+                # Cabeçalho
+                info = [["TIME:", nome_time], ["CUSTO TOTAL:", f"€{custo_atual:.2f}M"], ["OVERALL MÉDIO:", f"{media_ov:.1f}"], ["", ""]]
+                pd.DataFrame(info).to_excel(writer, index=False, header=False, sheet_name='Escalação')
+                df_f.to_excel(writer, index=False, startrow=5, sheet_name='Escalação')
+            st.sidebar.download_button("Baixar Arquivo", output.getvalue(), f"{nome_time}.xlsx")
