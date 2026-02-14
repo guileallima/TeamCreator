@@ -9,7 +9,8 @@ from email import encoders
 from io import BytesIO
 
 # --- CONFIGURAÇÕES DE E-MAIL ---
-EMAIL_REMETENTE = "seu_email@gmail.com" 
+# Certifique-se de que o EMAIL_REMETENTE abaixo é o mesmo que gerou a senha de app
+EMAIL_REMETENTE = "leallimagui@gmail.com" 
 SENHA_APP = "nmrytcivcuidhryn" 
 EMAIL_DESTINO = "leallimagui@gmail.com"
 
@@ -24,8 +25,8 @@ def load_data():
         for tab in data:
             data[tab].columns = data[tab].columns.str.strip()
         return data
-    except:
-        st.error("Erro ao carregar 'jogadores.xlsx'.")
+    except Exception as e:
+        st.error(f"Erro ao carregar 'jogadores.xlsx'. Verifique o arquivo no GitHub.")
         st.stop()
 
 def format_func(row):
@@ -59,7 +60,7 @@ with st.sidebar:
     st.markdown("---")
     formacao = st.selectbox("Escolha a Formação", ["4-5-1", "3-4-3", "4-4-2", "4-3-3", "3-5-2"])
 
-# Configuração técnica das posições baseada na sua descrição
+# Configurações de Posição
 config_form = {
     "4-5-1": {"ZAG": 2, "LAT": 2, "MEI": 5, "ATA": 1},
     "3-4-3": {"ZAG": 3, "LAT": 2, "MEI": 2, "ATA": 3},
@@ -95,27 +96,22 @@ elenco_pdf = []
 
 with col1:
     st.subheader(f"Titulares ({formacao})")
-    # Goleiro
     g = seletor_smart("🧤 Goleiro", data['GK'], "gk_t")
     if g: elenco_pdf.append({**g, "Slot": "Goleiro"})
 
-    # Zagueiros (Regra: Laterais e Zagueiros da aba DF)
     for i in range(conf["ZAG"]):
         s = seletor_smart(f"🛡️ Zagueiro {i+1}", data['DF'], f"zag_{i}")
         if s: elenco_pdf.append({**s, "Slot": f"Zagueiro {i+1}"})
         
-    # Laterais (Regra: Zagueiros, Laterais ou Meio-campo - abas DF e MF)
     df_lat = pd.concat([data['DF'], data['MF']])
     for i in range(conf["LAT"]):
         s = seletor_smart(f"🏃 Lateral {i+1}", df_lat, f"lat_{i}")
         if s: elenco_pdf.append({**s, "Slot": f"Lateral {i+1}"})
 
-    # Meio Campo (Somente MF)
     for i in range(conf["MEI"]):
         s = seletor_smart(f"🎯 Meio Campo {i+1}", data['MF'], f"mei_{i}")
         if s: elenco_pdf.append({**s, "Slot": f"Meio Campo {i+1}"})
 
-    # Atacante (Somente FW)
     for i in range(conf["ATA"]):
         s = seletor_smart(f"🚀 Atacante {i+1}", data['FW'], f"ata_{i}")
         if s: elenco_pdf.append({**s, "Slot": f"Atacante {i+1}"})
@@ -130,7 +126,7 @@ with col2:
         r = seletor_smart(f"Reserva {i+2}", todos_res, f"res_{i}")
         if r: elenco_pdf.append({**r, "Slot": f"Reserva {i+2}"})
 
-# --- FINALIZAÇÃO ---
+# --- BARRA LATERAL FINANCEIRA ---
 st.sidebar.metric("Orçamento Usado", f"€{custo_atual:.0f}", f"Saldo: €{saldo:.0f}")
 
 c1, c2, c3 = st.columns([4,1,1])
@@ -139,6 +135,7 @@ with c3:
         st.session_state.escolhas = {}
         st.rerun()
 
+# --- FINALIZAÇÃO E ENVIO ---
 if st.sidebar.button("✅ FINALIZAR INSCRIÇÃO"):
     if not int1 or not int2 or not email_contato:
         st.sidebar.error("Preencha todos os dados da dupla!")
@@ -159,9 +156,8 @@ if st.sidebar.button("✅ FINALIZAR INSCRIÇÃO"):
             pdf.ln(5)
             pdf.cell(200, 10, "ELENCO ESCOLHIDO:", ln=True)
             for p in elenco_pdf:
-                # Ajuste para evitar caracteres especiais no PDF simples
-                clean_name = p['Name'].encode('latin-1', 'ignore').decode('latin-1')
-                pdf.cell(0, 7, f"{p['Slot']}: {clean_name} ({p['Overall']})", ln=True)
+                clean_name = str(p['Name']).encode('latin-1', 'ignore').decode('latin-1')
+                pdf.cell(0, 7, f"{p['Slot']}: {clean_name} ({p['Overall']}) - €{p['Market Value (M€)']}", ln=True)
             
             pdf_bytes = pdf.output(dest='S').encode('latin-1')
 
@@ -176,13 +172,10 @@ if st.sidebar.button("✅ FINALIZAR INSCRIÇÃO"):
             part.add_header('Content-Disposition', f"attachment; filename={nome_time}.pdf")
             msg.attach(part)
             
-            server = smtplib.SMTP('smtp.gmail.com', 587)
-            server.starttls()
-            server.login(EMAIL_REMETENTE, SENHA_APP)
-            server.send_message(msg)
-            server.quit()
+            with smtplib.SMTP_SSL('smtp.gmail.com', 465) as server:
+                server.login(EMAIL_REMETENTE, SENHA_APP)
+                server.send_message(msg)
             
             st.success("✅ Inscrição enviada com sucesso!")
         except Exception as e:
             st.error(f"Erro ao enviar: {e}")
-
