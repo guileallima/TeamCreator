@@ -45,7 +45,6 @@ st.set_page_config(page_title="Squad Builder PES 2013", layout="wide")
 def clean_price(val):
     if pd.isna(val) or val == '': return 0.0
     s_val = str(val)
-    # Remove qualquer coisa que não seja dígito, ponto ou vírgula
     s_val = re.sub(r'[^\d.,]', '', s_val)
     if not s_val: return 0.0
     s_val = s_val.replace(',', '.')
@@ -55,7 +54,7 @@ def clean_price(val):
 @st.cache_data
 def load_data():
     try:
-        # 1. Carrega dados VISUAIS (jogadores.xlsx)
+        # 1. VISUAL (Site)
         file_ui = "jogadores.xlsx"
         tabs = ['GK', 'DF', 'MF', 'FW']
         data_ui = {}
@@ -63,12 +62,10 @@ def load_data():
             df = pd.read_excel(file_ui, sheet_name=tab)
             df.columns = df.columns.str.strip().str.upper()
             
-            # ID Visual
             col_id = df.columns[0]
             df.rename(columns={col_id: 'INDEX'}, inplace=True)
             df['INDEX'] = df['INDEX'].astype(str).str.strip()
             
-            # Preço Visual
             col_price = None
             for c in ['MARKET PRICE', 'MARKET VALUE (M€)', 'MARKET VALUE', 'VALUE', 'PRICE']:
                 if c in df.columns:
@@ -81,14 +78,12 @@ def load_data():
             
             data_ui[tab] = df
 
-        # 2. Carrega DADOS COMPLETOS (jogadoresdata.xlsx)
+        # 2. DADOS (Jogo)
         file_raw = "jogadoresdata.xlsx"
         df_raw = pd.read_excel(file_raw)
         df_raw.columns = df_raw.columns.str.strip().str.upper()
-        
         if 'INDEX' not in df_raw.columns:
             df_raw.rename(columns={df_raw.columns[0]: 'INDEX'}, inplace=True)
-            
         df_raw['INDEX'] = df_raw['INDEX'].astype(str).str.strip()
             
         return data_ui, df_raw
@@ -97,7 +92,6 @@ def load_data():
         st.error(f"Erro ao carregar arquivos: {e}")
         st.stop()
 
-# Carrega os dois datasets
 data_ui, data_raw = load_data()
 
 # --- SESSÃO ---
@@ -108,7 +102,7 @@ def reset_callback():
     st.session_state.escolhas = {}
     st.session_state.form_id += 1
 
-# --- CÁLCULO ORÇAMENTO ---
+# --- CÁLCULO ---
 custo_total = 0.0
 for k, player in st.session_state.escolhas.items():
     if player: custo_total += player.get('MARKET PRICE', 0.0)
@@ -171,90 +165,152 @@ st.title(f"⚽ {nome_time.upper()}")
 config = {"4-5-1": {"Z":2,"L":2,"M":5,"A":1}, "3-4-3": {"Z":3,"L":2,"M":2,"A":3}, "4-4-2": {"Z":2,"L":2,"M":4,"A":2}, "4-3-3": {"Z":2,"L":2,"M":3,"A":3}, "3-5-2": {"Z":3,"L":2,"M":3,"A":2}}[formacao]
 
 c1, c2 = st.columns([2, 1])
-lista_visual = [] # Para o PDF
+lista_visual = [] 
 
 with c1:
     st.subheader("Titulares")
     gk = seletor("🧤 Goleiro", data_ui['GK'], "gk_tit")
-    if gk: lista_visual.append({**gk, "TIPO": "TITULAR"})
+    if gk: lista_visual.append({**gk, "TIPO": "TITULAR", "POS_DISPLAY": "GK"})
     for i in range(config["Z"]):
         z = seletor(f"🛡️ Zagueiro {i+1}", data_ui['DF'], f"zag_{i}")
-        if z: lista_visual.append({**z, "TIPO": "TITULAR"})
+        if z: lista_visual.append({**z, "TIPO": "TITULAR", "POS_DISPLAY": "CB"})
     for i in range(config["L"]):
         l = seletor(f"🏃 Lateral {i+1}", pd.concat([data_ui['DF'], data_ui['MF']]), f"lat_{i}")
-        if l: lista_visual.append({**l, "TIPO": "TITULAR"})
+        if l: lista_visual.append({**l, "TIPO": "TITULAR", "POS_DISPLAY": "LB/RB"})
     for i in range(config["M"]):
         m = seletor(f"🎯 Meio Campo {i+1}", data_ui['MF'], f"mei_{i}")
-        if m: lista_visual.append({**m, "TIPO": "TITULAR"})
+        if m: lista_visual.append({**m, "TIPO": "TITULAR", "POS_DISPLAY": "MF"})
     for i in range(config["A"]):
         a = seletor(f"🚀 Atacante {i+1}", data_ui['FW'], f"ata_{i}")
-        if a: lista_visual.append({**a, "TIPO": "TITULAR"})
+        if a: lista_visual.append({**a, "TIPO": "TITULAR", "POS_DISPLAY": "CF/SS"})
 
 with c2:
     st.subheader("Reservas (5)")
     gkr = seletor("🧤 Goleiro Reserva", data_ui['GK'], "gk_res")
-    if gkr: lista_visual.append({**gkr, "TIPO": "RESERVA"})
+    if gkr: lista_visual.append({**gkr, "TIPO": "RESERVA", "POS_DISPLAY": "GK"})
     df_all = pd.concat([data_ui['DF'], data_ui['MF'], data_ui['FW']])
     for i in range(4):
         r = seletor(f"Reserva {i+2}", df_all, f"res_{i}")
-        if r: lista_visual.append({**r, "TIPO": "RESERVA"})
+        if r: lista_visual.append({**r, "TIPO": "RESERVA", "POS_DISPLAY": "RES"})
 
 if st.button("🔄 Resetar", on_click=reset_callback): pass
 
-# --- EXPORTAÇÃO CRUZADA ---
+# --- EXPORTAÇÃO ---
 if st.sidebar.button("✅ ENVIAR INSCRIÇÃO"):
     if not int1 or not int2 or not email_user: st.sidebar.error("Dados incompletos."); st.stop()
     if len(lista_visual) < 16: st.sidebar.warning("Selecione os 16 jogadores."); st.stop()
     
     try:
-        # 1. Recupera IDs selecionados (Visual)
+        # 1. Recupera IDs
         ids_selecionados = [str(p['INDEX']).strip() for p in lista_visual]
         
-        # 2. Filtra o arquivo RAW (jogadoresdata.xlsx)
+        # 2. Gera CSV (Match com arquivo Raw)
         df_export_raw = data_raw[data_raw['INDEX'].isin(ids_selecionados)].copy()
-        
-        # 3. Organiza colunas
         df_export_final = df_export_raw.reindex(columns=COLUNAS_MASTER_LIGA)
-        
-        # CSV Final
         csv_str = df_export_final.to_csv(sep=';', index=False, encoding='utf-8-sig')
         
-        # PDF Visual
+        # 3. Gera PDF VISUAL LIMPO
         pdf = FPDF()
         pdf.add_page()
+        
+        # Cabeçalho Escuro
         pdf.set_fill_color(20,20,20); pdf.rect(0,0,210,40,'F')
+        
+        # Escudo
         if escudo:
             with tempfile.NamedTemporaryFile(delete=False, suffix=".png") as tf:
                 tf.write(escudo.getvalue()); tname=tf.name
-            pdf.image(tname, x=90, y=5, w=30); os.unlink(tname)
+            pdf.image(tname, x=10, y=5, w=25); os.unlink(tname)
+        
+        # Nome do Time
         pdf.set_font("Arial", 'B', 24); pdf.set_text_color(255,255,255)
-        pdf.set_y(32); pdf.cell(0, 10, nome_time.upper(), 0, 1, 'C')
-        pdf.set_text_color(0,0,0); pdf.ln(10); pdf.set_font("Arial", '', 12)
-        pdf.cell(0, 6, f"Dupla: {int1} & {int2}", 0, 1, 'C')
-        pdf.cell(0, 6, f"E-mail: {email_user}", 0, 1, 'C')
+        pdf.set_y(15); pdf.cell(0, 10, nome_time.upper(), 0, 1, 'C')
+        
+        # Dados da Dupla (Abaixo do Header)
+        pdf.set_text_color(0,0,0); pdf.ln(20)
+        pdf.set_font("Arial", '', 12)
+        pdf.cell(0, 6, f"Treinadores: {int1} & {int2}", 0, 1, 'C')
+        pdf.cell(0, 6, f"Formação: {formacao}", 0, 1, 'C')
         pdf.ln(5)
         
+        # --- TABELA DE TITULARES ---
+        pdf.set_fill_color(220, 220, 220)
+        pdf.set_font("Arial", 'B', 12)
+        pdf.cell(0, 10, "  ELENCO TITULAR", 0, 1, 'L', fill=True)
+        pdf.ln(2)
+        
+        pdf.set_font("Arial", '', 11)
+        
+        soma_ov_titular = 0
+        qtd_titular = 0
+        
+        # Lista Titulares
         for p in lista_visual:
-            n = str(p.get('NAME','')).encode('latin-1','ignore').decode('latin-1')
-            idx = str(p.get('INDEX',''))
-            pdf.cell(20, 8, idx, 1, 0, 'C')
-            pdf.cell(100, 8, f"{n} ({p['TIPO']})", 1, 0, 'L')
-            
-            # --- CORREÇÃO AQUI: Troquei o símbolo '€' por 'EUR' para evitar erro latin-1 ---
-            preco = p.get('MARKET PRICE', 0)
-            pdf.cell(30, 8, f"EUR {preco:.1f}", 1, 1, 'C')
-            
+            if p['TIPO'] == 'TITULAR':
+                nome = str(p.get('NAME','')).encode('latin-1','ignore').decode('latin-1')
+                pos = p.get('POS_DISPLAY', '-')
+                ov = p.get('OVERALL', 0)
+                
+                # Soma para a média
+                try: 
+                    ov_val = float(ov)
+                    soma_ov_titular += ov_val
+                    qtd_titular += 1
+                except: pass
+
+                # Desenha linha: POSIÇÃO | NOME ........... OVERALL
+                pdf.cell(30, 8, pos, 0, 0, 'C')
+                pdf.cell(130, 8, nome, 0, 0, 'L')
+                pdf.set_font("Arial", 'B', 11)
+                pdf.cell(30, 8, str(ov), 0, 1, 'C')
+                pdf.set_font("Arial", '', 11)
+                
+                # Linha fina separadora
+                pdf.set_draw_color(200,200,200)
+                pdf.line(10, pdf.get_y(), 200, pdf.get_y())
+
+        # --- TABELA DE RESERVAS ---
+        pdf.ln(5)
+        pdf.set_fill_color(220, 220, 220)
+        pdf.set_font("Arial", 'B', 12)
+        pdf.cell(0, 10, "  BANCO DE RESERVAS", 0, 1, 'L', fill=True)
+        pdf.ln(2)
+        
+        pdf.set_font("Arial", '', 11)
+        for p in lista_visual:
+            if p['TIPO'] == 'RESERVA':
+                nome = str(p.get('NAME','')).encode('latin-1','ignore').decode('latin-1')
+                pos = p.get('POS_DISPLAY', '-')
+                ov = p.get('OVERALL', 0)
+                
+                pdf.cell(30, 8, pos, 0, 0, 'C')
+                pdf.cell(130, 8, nome, 0, 0, 'L')
+                pdf.set_font("Arial", 'B', 11)
+                pdf.cell(30, 8, str(ov), 0, 1, 'C')
+                pdf.set_font("Arial", '', 11)
+                pdf.set_draw_color(200,200,200)
+                pdf.line(10, pdf.get_y(), 200, pdf.get_y())
+        
+        # --- RODAPÉ COM MÉDIA ---
+        pdf.ln(10)
+        media = soma_ov_titular / qtd_titular if qtd_titular > 0 else 0
+        
+        pdf.set_fill_color(50, 50, 50)
+        pdf.set_text_color(255, 255, 255)
+        pdf.set_font("Arial", 'B', 14)
+        pdf.cell(0, 12, f"FORÇA DO TIME (Média Titular): {media:.1f}", 0, 1, 'C', fill=True)
+        
         pdf_bytes = pdf.output(dest='S').encode('latin-1')
 
         # EMAIL
         msg = MIMEMultipart()
         msg['From'], msg['To'] = EMAIL_REMETENTE, EMAIL_DESTINO
-        msg['Subject'] = f"Time: {nome_time}"
-        msg.attach(MIMEText(f"Inscrição Master Liga.\nTime: {nome_time}", 'plain'))
+        msg['Subject'] = f"Escalação Oficial: {nome_time}"
+        msg.attach(MIMEText(f"Time: {nome_time}\nDupla: {int1}/{int2}\n\nConfira a escalação oficial no PDF anexo.", 'plain'))
         
         att1 = MIMEBase('application', 'pdf')
         att1.set_payload(pdf_bytes); encoders.encode_base64(att1)
-        att1.add_header('Content-Disposition', 'attachment; filename="Visual.pdf"'); msg.attach(att1)
+        att1.add_header('Content-Disposition', 'attachment; filename="Escalacao.pdf"'); msg.attach(att1)
         
         att2 = MIMEBase('text', 'csv')
         att2.set_payload(csv_str.encode('utf-8-sig')); encoders.encode_base64(att2)
@@ -269,7 +325,7 @@ if st.sidebar.button("✅ ENVIAR INSCRIÇÃO"):
             s.login(EMAIL_REMETENTE, SENHA_APP)
             s.send_message(msg)
             
-        st.success("✅ Enviado! Dados cruzados com sucesso (Via Excel).")
+        st.success("✅ Inscrição Enviada com Sucesso! (PDF Limpo + CSV Master Liga)")
         
     except Exception as e:
         st.error(f"Erro no processamento: {e}")
