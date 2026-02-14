@@ -9,7 +9,6 @@ from email import encoders
 from io import BytesIO
 
 # --- CONFIGURAÇÕES DE E-MAIL ---
-# Certifique-se de que o EMAIL_REMETENTE abaixo é o mesmo que gerou a senha de app
 EMAIL_REMETENTE = "leallimagui@gmail.com" 
 SENHA_APP = "nmrytcivcuidhryn" 
 EMAIL_DESTINO = "leallimagui@gmail.com"
@@ -40,7 +39,6 @@ ORCAMENTO_MAX = 3000.0
 if 'escolhas' not in st.session_state:
     st.session_state.escolhas = {}
 
-# --- CÁLCULO DE SALDO ---
 custo_atual = sum([v['Market Value (M€)'] for v in st.session_state.escolhas.values() if v is not None])
 saldo = ORCAMENTO_MAX - custo_atual
 
@@ -60,7 +58,6 @@ with st.sidebar:
     st.markdown("---")
     formacao = st.selectbox("Escolha a Formação", ["4-5-1", "3-4-3", "4-4-2", "4-3-3", "3-5-2"])
 
-# Configurações de Posição
 config_form = {
     "4-5-1": {"ZAG": 2, "LAT": 2, "MEI": 5, "ATA": 1},
     "3-4-3": {"ZAG": 3, "LAT": 2, "MEI": 2, "ATA": 3},
@@ -73,24 +70,22 @@ conf = config_form[formacao]
 def seletor_smart(label, df_base, key_id):
     outros_nomes = [v['Name'] for k, v in st.session_state.escolhas.items() if v is not None and k != key_id]
     v_atual = st.session_state.escolhas.get(key_id, {}).get('Market Value (M€)', 0) if st.session_state.escolhas.get(key_id) else 0
-    
     df_f = df_base[(df_base['Market Value (M€)'] <= (saldo + v_atual)) & (~df_base['Name'].isin(outros_nomes))]
     opcoes = [None] + df_f.sort_values('Overall', ascending=False).to_dict('records')
     
-    index_atual = 0
+    idx = 0
     if st.session_state.escolhas.get(key_id):
         for i, opt in enumerate(opcoes):
             if opt and opt['Name'] == st.session_state.escolhas[key_id]['Name']:
-                index_atual = i
+                idx = i
                 break
     
-    sel = st.selectbox(label, opcoes, index=index_atual, format_func=format_func, key=key_id)
+    sel = st.selectbox(label, opcoes, index=idx, format_func=format_func, key=key_id)
     if st.session_state.escolhas.get(key_id) != sel:
         st.session_state.escolhas[key_id] = sel
         st.rerun()
     return sel
 
-# --- CORPO DA PÁGINA ---
 col1, col2 = st.columns([2, 1])
 elenco_pdf = []
 
@@ -126,21 +121,18 @@ with col2:
         r = seletor_smart(f"Reserva {i+2}", todos_res, f"res_{i}")
         if r: elenco_pdf.append({**r, "Slot": f"Reserva {i+2}"})
 
-# --- BARRA LATERAL FINANCEIRA ---
 st.sidebar.metric("Orçamento Usado", f"€{custo_atual:.0f}", f"Saldo: €{saldo:.0f}")
 
-c1, c2, c3 = st.columns([4,1,1])
-with c3:
-    if st.button("🔄 Resetar Time"):
-        st.session_state.escolhas = {}
-        st.rerun()
+if st.button("🔄 Resetar Time"):
+    st.session_state.escolhas = {}
+    st.rerun()
 
 # --- FINALIZAÇÃO E ENVIO ---
 if st.sidebar.button("✅ FINALIZAR INSCRIÇÃO"):
     if not int1 or not int2 or not email_contato:
         st.sidebar.error("Preencha todos os dados da dupla!")
     elif len(elenco_pdf) < 19:
-        st.sidebar.warning("Selecione os 11 titulares e 8 reservas!")
+        st.sidebar.warning("Selecione os 19 jogadores!")
     else:
         try:
             pdf = FPDF()
@@ -152,19 +144,21 @@ if st.sidebar.button("✅ FINALIZAR INSCRIÇÃO"):
             pdf.cell(200, 10, f"Integrante 1: {int1}", ln=True)
             pdf.cell(200, 10, f"Integrante 2: {int2}", ln=True)
             pdf.cell(200, 10, f"E-mail: {email_contato}", ln=True)
-            pdf.cell(200, 10, f"Custo: {custo_atual} | Formacao: {formacao}", ln=True)
+            # Trocando símbolo do Euro por texto para evitar erro de codec
+            pdf.cell(200, 10, f"Custo: EUR {custo_atual:.0f} | Formacao: {formacao}", ln=True)
             pdf.ln(5)
             pdf.cell(200, 10, "ELENCO ESCOLHIDO:", ln=True)
             for p in elenco_pdf:
-                clean_name = str(p['Name']).encode('latin-1', 'ignore').decode('latin-1')
-                pdf.cell(0, 7, f"{p['Slot']}: {clean_name} ({p['Overall']}) - €{p['Market Value (M€)']}", ln=True)
+                # Limpeza profunda para o PDF não quebrar com nomes ou símbolos
+                clean_name = str(p['Name']).encode('ascii', 'ignore').decode('ascii')
+                pdf.cell(0, 7, f"{p['Slot']}: {clean_name} ({p['Overall']}) - EUR {p['Market Value (M€)']}", ln=True)
             
             pdf_bytes = pdf.output(dest='S').encode('latin-1')
 
             msg = MIMEMultipart()
             msg['From'], msg['To'] = EMAIL_REMETENTE, EMAIL_DESTINO
             msg['Subject'] = f"Inscrição: {nome_time} ({int1} / {int2})"
-            msg.attach(MIMEText(f"Nova inscrição recebida.\nTime: {nome_time}\nDupla: {int1} e {int2}", 'plain'))
+            msg.attach(MIMEText(f"Nova inscrição de {nome_time}.\nDupla: {int1} e {int2}", 'plain'))
             
             part = MIMEBase('application', 'octet-stream')
             part.set_payload(pdf_bytes)
