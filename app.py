@@ -27,7 +27,7 @@ def load_data():
             data[tab].columns = data[tab].columns.str.strip()
         return data
     except Exception as e:
-        st.error(f"Erro ao carregar 'jogadores.xlsx'. Verifique o arquivo no GitHub.")
+        st.error(f"Erro ao carregar 'jogadores.xlsx'.")
         st.stop()
 
 def format_func(row):
@@ -140,23 +140,23 @@ if st.sidebar.button("✅ FINALIZAR INSCRIÇÃO"):
             pdf = FPDF()
             pdf.add_page()
             
-            # 1. TÍTULO DO TIME (NO TOPO)
+            # Título
             pdf.set_font("Arial", 'B', 20)
             pdf.cell(200, 15, f"{nome_time.upper()}", ln=True, align='C')
             
-            # 2. ESCUDO (LOGO ABAIXO DO TÍTULO)
+            # Imagem no PDF
             if escudo:
                 suffix = os.path.splitext(escudo.name)[1]
                 with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
                     tmp.write(escudo.getvalue())
                     tmp_path = tmp.name
                 pdf.image(tmp_path, x=85, y=25, w=40)
-                pdf.ln(45) # Espaço após a imagem
+                pdf.ln(45)
                 os.unlink(tmp_path)
             else:
                 pdf.ln(10)
 
-            # 3. DADOS DA DUPLA
+            # Dados
             pdf.set_font("Arial", 'B', 12)
             pdf.cell(200, 8, "INFORMAÇÕES GERAIS:", ln=True)
             pdf.set_font("Arial", size=11)
@@ -166,32 +166,42 @@ if st.sidebar.button("✅ FINALIZAR INSCRIÇÃO"):
             pdf.cell(200, 7, f"Custo Total: EUR {custo_atual:.0f} | Formação: {formacao}", ln=True)
             pdf.ln(5)
             
-            # 4. ELENCO
             pdf.set_font("Arial", 'B', 12)
             pdf.cell(200, 10, "ELENCO ESCOLHIDO:", ln=True)
             pdf.set_font("Arial", size=10)
             for p in elenco_pdf:
-                # Remove caracteres especiais para evitar erro de codificação
                 clean_name = str(p['Name']).encode('ascii', 'ignore').decode('ascii')
                 pdf.cell(0, 6, f"{p['Slot']}: {clean_name} ({p['Overall']}) - EUR {p['Market Value (M€)']}", ln=True)
             
             pdf_bytes = pdf.output(dest='S').encode('latin-1')
 
+            # E-mail com múltiplos anexos
             msg = MIMEMultipart()
             msg['From'], msg['To'] = EMAIL_REMETENTE, EMAIL_DESTINO
             msg['Subject'] = f"Inscrição: {nome_time} ({int1} / {int2})"
-            msg.attach(MIMEText(f"Inscrição recebida.\nTime: {nome_time}\nDupla: {int1} e {int2}", 'plain'))
             
-            part = MIMEBase('application', 'octet-stream')
-            part.set_payload(pdf_bytes)
-            encoders.encode_base64(part)
-            part.add_header('Content-Disposition', f"attachment; filename={nome_time}.pdf")
-            msg.attach(part)
+            corpo = f"Nova inscrição recebida.\nTime: {nome_time}\nIntegrantes: {int1} e {int2}\n\nO PDF e o Escudo estão em anexo."
+            msg.attach(MIMEText(corpo, 'plain'))
+            
+            # Anexo 1: PDF
+            part_pdf = MIMEBase('application', 'octet-stream')
+            part_pdf.set_payload(pdf_bytes)
+            encoders.encode_base64(part_pdf)
+            part_pdf.add_header('Content-Disposition', f"attachment; filename={nome_time}.pdf")
+            msg.attach(part_pdf)
+            
+            # Anexo 2: Escudo separado
+            if escudo:
+                part_img = MIMEBase('image', os.path.splitext(escudo.name)[1][1:])
+                part_img.set_payload(escudo.getvalue())
+                encoders.encode_base64(part_img)
+                part_img.add_header('Content-Disposition', f"attachment; filename=ESCUDO_{nome_time}{os.path.splitext(escudo.name)[1]}")
+                msg.attach(part_img)
             
             with smtplib.SMTP_SSL('smtp.gmail.com', 465) as server:
                 server.login(EMAIL_REMETENTE, SENHA_APP)
                 server.send_message(msg)
             
-            st.success("✅ Inscrição enviada! Verifique seu e-mail.")
+            st.success("✅ Inscrição enviada! PDF e Escudo anexados.")
         except Exception as e:
-            st.error(f"Erro ao processar PDF/E-mail: {e}")
+            st.error(f"Erro: {e}")
