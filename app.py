@@ -48,13 +48,19 @@ def load_data():
         data = {}
         for tab in tabs:
             df = pd.read_excel(file, sheet_name=tab)
-            df.columns = df.columns.str.strip()
             
-            # --- CORREÇÃO DO ID ---
-            # Pega o nome da primeira coluna, seja ele qual for (ID, Index, Unnamed: 0, etc)
-            coluna_id = df.columns[0]
-            # Renomeia internamente para 'INDEX' para padronizar
-            df.rename(columns={coluna_id: 'INDEX'}, inplace=True)
+            # --- PADRONIZAÇÃO DE COLUNAS ---
+            # Remove espaços extras e converte tudo para MAIÚSCULO para bater com o padrão CSV
+            df.columns = df.columns.str.strip().str.upper()
+            
+            # Garante que a primeira coluna seja o ID/INDEX
+            coluna_id_real = df.columns[0]
+            df.rename(columns={coluna_id_real: 'INDEX'}, inplace=True)
+            
+            # Correção de preço se necessário
+            # Se não achar MARKET PRICE mas achar MARKET VALUE (M€), renomeia ou cria alias
+            if 'MARKET VALUE (M€)' in df.columns:
+                df['MARKET PRICE'] = df['MARKET VALUE (M€)']
             
             data[tab] = df
         return data
@@ -64,7 +70,8 @@ def load_data():
 
 def get_p(r):
     if r is None: return 0.0
-    for col in ['Market Value (M€)', 'MARKET PRICE', 'market value', 'Market Value']:
+    # Procura em variações comuns de nome de coluna
+    for col in ['MARKET PRICE', 'MARKET VALUE (M€)', 'MARKET VALUE']:
         if col in r:
             try: return float(r[col])
             except: continue
@@ -72,10 +79,9 @@ def get_p(r):
 
 def format_func(row):
     if row is None: return "Selecione..."
-    # Agora garantimos que 'INDEX' existe
     idx = row.get('INDEX', '???')
-    name = row.get('Name', row.get('NAME', 'Desconhecido'))
-    ov = row.get('Overall', row.get('overall', '??'))
+    name = row.get('NAME', row.get('Name', 'Desconhecido'))
+    ov = row.get('OVERALL', row.get('Overall', '??'))
     price = get_p(row)
     return f"ID: {idx} | {name} - OV: {ov} - €{price:.1f}"
 
@@ -122,7 +128,7 @@ conf = config_form[formacao]
 
 def seletor_smart(label, df_base, key_id):
     val_atual = get_p(st.session_state.escolhas.get(key_id))
-    outros = [v.get('Name', v.get('NAME')) for k, v in st.session_state.escolhas.items() if v is not None and k != key_id]
+    outros = [v.get('NAME', '') for k, v in st.session_state.escolhas.items() if v is not None and k != key_id]
     
     # Filtros
     df_f = df_base[
@@ -130,11 +136,11 @@ def seletor_smart(label, df_base, key_id):
         (df_base.apply(get_p, axis=1) <= filtro_p)
     ]
     
-    n_col = 'Name' if 'Name' in df_base.columns else 'NAME'
-    df_f = df_f[~df_f[n_col].isin(outros)]
+    df_f = df_f[~df_f['NAME'].isin(outros)]
     
-    o_col = 'Overall' if 'Overall' in df_base.columns else 'overall'
-    ops = [None] + df_f.sort_values(o_col, ascending=False).to_dict('records')
+    # Ordenação por Overall (agora em maiúsculo)
+    col_ov = 'OVERALL' if 'OVERALL' in df_base.columns else df_base.columns[2] # Fallback
+    ops = [None] + df_f.sort_values(col_ov, ascending=False).to_dict('records')
     
     sel = st.selectbox(label, ops, format_func=format_func, key=f"{key_id}_{st.session_state.form_id}")
     
@@ -200,18 +206,21 @@ if st.sidebar.button("✅ FINALIZAR E ENVIAR"):
             pdf.ln(5); pdf.set_fill_color(240, 240, 240); pdf.cell(0, 8, " ELENCO", ln=True, fill=True)
             pdf.set_font("Arial", size=10)
             for p in elenco:
-                n = str(p.get('Name', p.get('NAME'))).encode('ascii', 'ignore').decode('ascii')
-                # Exibir ID também no PDF
-                idx = p.get('INDEX', '???')
+                n = str(p.get('NAME', 'Unknown')).encode('ascii', 'ignore').decode('ascii')
+                idx = p.get('INDEX', '---')
                 pdf.cell(25, 6, f"ID: {idx}", 0)
-                pdf.cell(95, 6, f"{n} ({p['T']})", 0)
-                pdf.cell(50, 6, f"OV: {p.get('Overall', p.get('overall'))}", 0, 1, 'R')
+                pdf.cell(100, 6, f"{n} ({p['T']})", 0)
+                pdf.cell(50, 6, f"OV: {p.get('OVERALL', '??')}", 0, 1, 'R')
             pdf_bytes = pdf.output(dest='S').encode('latin-1')
 
-            # CSV (PADRÃO MASTER LIGA)
+            # CSV (PADRÃO MASTER LIGA COM DADOS REAIS)
             df_export = pd.DataFrame(elenco)
-            # Garante a existência da coluna INDEX e todas as outras
+            
+            # Garante que as colunas do padrão PES existam no DataFrame final
+            # O reindex vai pegar os dados que já existem (porque convertemos tudo para maiúsculo na carga)
+            # e criar colunas vazias apenas para o que faltar
             df_export = df_export.reindex(columns=COLUNAS_MASTER_LIGA)
+            
             csv_str = df_export.to_csv(sep=';', index=False, encoding='utf-8-sig')
 
             # EMAIL
