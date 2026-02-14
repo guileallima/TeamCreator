@@ -7,6 +7,8 @@ from email.mime.base import MIMEBase
 from email.mime.text import MIMEText
 from email import encoders
 from io import BytesIO
+import tempfile
+import os
 
 # --- CONFIGURAÇÕES DE E-MAIL ---
 EMAIL_REMETENTE = "leallimagui@gmail.com" 
@@ -137,28 +139,48 @@ if st.sidebar.button("✅ FINALIZAR INSCRIÇÃO"):
         try:
             pdf = FPDF()
             pdf.add_page()
-            pdf.set_font("Arial", 'B', 16)
-            pdf.cell(200, 10, f"INSCRICAO PES 2013 - {nome_time}", ln=True, align='C')
+            
+            # 1. TÍTULO DO TIME (NO TOPO)
+            pdf.set_font("Arial", 'B', 20)
+            pdf.cell(200, 15, f"{nome_time.upper()}", ln=True, align='C')
+            
+            # 2. ESCUDO (LOGO ABAIXO DO TÍTULO)
+            if escudo:
+                suffix = os.path.splitext(escudo.name)[1]
+                with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
+                    tmp.write(escudo.getvalue())
+                    tmp_path = tmp.name
+                pdf.image(tmp_path, x=85, y=25, w=40)
+                pdf.ln(45) # Espaço após a imagem
+                os.unlink(tmp_path)
+            else:
+                pdf.ln(10)
+
+            # 3. DADOS DA DUPLA
+            pdf.set_font("Arial", 'B', 12)
+            pdf.cell(200, 8, "INFORMAÇÕES GERAIS:", ln=True)
+            pdf.set_font("Arial", size=11)
+            pdf.cell(200, 7, f"Integrante 1: {int1}", ln=True)
+            pdf.cell(200, 7, f"Integrante 2: {int2}", ln=True)
+            pdf.cell(200, 7, f"E-mail: {email_contato}", ln=True)
+            pdf.cell(200, 7, f"Custo Total: EUR {custo_atual:.0f} | Formação: {formacao}", ln=True)
             pdf.ln(5)
-            pdf.set_font("Arial", size=12)
-            pdf.cell(200, 10, f"Integrante 1: {int1}", ln=True)
-            pdf.cell(200, 10, f"Integrante 2: {int2}", ln=True)
-            pdf.cell(200, 10, f"E-mail: {email_contato}", ln=True)
-            # Trocando símbolo do Euro por texto para evitar erro de codec
-            pdf.cell(200, 10, f"Custo: EUR {custo_atual:.0f} | Formacao: {formacao}", ln=True)
-            pdf.ln(5)
+            
+            # 4. ELENCO
+            pdf.set_font("Arial", 'B', 12)
             pdf.cell(200, 10, "ELENCO ESCOLHIDO:", ln=True)
+            pdf.set_font("Arial", size=10)
             for p in elenco_pdf:
-                # Limpeza profunda para o PDF não quebrar com nomes ou símbolos
+                # Remove caracteres especiais para evitar erro de codificação
                 clean_name = str(p['Name']).encode('ascii', 'ignore').decode('ascii')
-                pdf.cell(0, 7, f"{p['Slot']}: {clean_name} ({p['Overall']}) - EUR {p['Market Value (M€)']}", ln=True)
+                pdf.cell(0, 6, f"{p['Slot']}: {clean_name} ({p['Overall']}) - EUR {p['Market Value (M€)']}", ln=True)
             
             pdf_bytes = pdf.output(dest='S').encode('latin-1')
 
             msg = MIMEMultipart()
             msg['From'], msg['To'] = EMAIL_REMETENTE, EMAIL_DESTINO
             msg['Subject'] = f"Inscrição: {nome_time} ({int1} / {int2})"
-            msg.attach(MIMEText(f"Nova inscrição de {nome_time}.\nDupla: {int1} e {int2}", 'plain'))
+            msg.attach(MIMEText(f"Inscrição recebida.\nTime: {nome_time}\nDupla: {int1} e {int2}", 'plain'))
             
             part = MIMEBase('application', 'octet-stream')
             part.set_payload(pdf_bytes)
@@ -170,6 +192,6 @@ if st.sidebar.button("✅ FINALIZAR INSCRIÇÃO"):
                 server.login(EMAIL_REMETENTE, SENHA_APP)
                 server.send_message(msg)
             
-            st.success("✅ Inscrição enviada com sucesso!")
+            st.success("✅ Inscrição enviada! Verifique seu e-mail.")
         except Exception as e:
-            st.error(f"Erro ao enviar: {e}")
+            st.error(f"Erro ao processar PDF/E-mail: {e}")
