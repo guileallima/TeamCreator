@@ -30,9 +30,17 @@ def load_data():
         st.error("Erro ao carregar 'jogadores.xlsx'.")
         st.stop()
 
+# --- FUNÇÃO DE PREÇO CORRIGIDA ---
 def get_p(r):
-    if r is None or not isinstance(r, dict): return 0
-    return r.get('Market Value (M€)', r.get('MARKET PRICE', r.get('market value', 0)))
+    if r is None: return 0
+    # Tenta encontrar o valor em diferentes colunas possíveis
+    for col in ['Market Value (M€)', 'MARKET PRICE', 'market value']:
+        if col in r:
+            try:
+                return float(r[col])
+            except:
+                continue
+    return 0
 
 def format_func(row):
     if row is None: return "Selecione..."
@@ -60,9 +68,9 @@ with st.sidebar:
     escudo = st.file_uploader("Escudo", type=["png", "jpg"], key=f"es_{st.session_state.form_id}")
     
     st.markdown("---")
-    st.subheader("🔍 Filtros de Busca")
-    # Filtro de preço adicional solicitado
-    filtro_preco = st.slider("Preço Máximo por Jogador", 0, 1500, 1500)
+    st.subheader("🔍 Filtro de Preço")
+    # Filtro que agora funciona corretamente
+    filtro_preco = st.slider("Preço Máximo por Jogador", 0, 1500, 1500, key=f"slide_{st.session_state.form_id}")
     
     formacao = st.selectbox("Formação", ["4-5-1", "3-4-3", "4-4-2", "4-3-3", "3-5-2"], key=f"fo_{st.session_state.form_id}")
 
@@ -83,13 +91,15 @@ def seletor_smart(label, df_base, key_id):
     v_at = get_p(st.session_state.escolhas.get(key_id))
     outros = [v.get('Name', v.get('NAME')) for k, v in st.session_state.escolhas.items() if v is not None and k != key_id]
     
-    # Aplica filtros: Orçamento restante + Filtro de preço manual + Duplicidade
-    df_f = df_base[
-        (df_base.apply(lambda x: get_p(x) <= (saldo + v_at), axis=1)) & 
-        (df_base.apply(lambda x: get_p(x) <= filtro_preco, axis=1))
-    ]
+    # Lógica de filtragem corrigida usando apply de forma segura
+    precos_serie = df_base.apply(get_p, axis=1)
+    
+    mask = (precos_serie <= (saldo + v_at)) & (precos_serie <= filtro_preco)
+    
     n_col = 'Name' if 'Name' in df_base.columns else 'NAME'
-    df_f = df_f[~df_f[n_col].isin(outros)]
+    mask = mask & (~df_base[n_col].isin(outros))
+    
+    df_f = df_base[mask]
     
     o_col = 'Overall' if 'Overall' in df_base.columns else 'overall'
     ops = [None] + df_f.sort_values(o_col, ascending=False).to_dict('records')
@@ -128,7 +138,7 @@ with col2:
     if gr: elenco_final.append({**gr, "TIPO": "RESERVA"})
     
     todos_res = pd.concat([data['DF'], data['MF'], data['FW']])
-    for i in range(4): # 4 reservas de linha + 1 goleiro = 5 no total
+    for i in range(4): # 1 GK + 4 Linha = 5
         r = seletor_smart(f"Reserva {i+2}", todos_res, f"res_{i}")
         if r: elenco_final.append({**r, "TIPO": "RESERVA"})
 
@@ -141,7 +151,6 @@ if st.sidebar.button("✅ FINALIZAR E ENVIAR"):
         st.sidebar.error("Selecione os 16 jogadores e preencha a dupla!")
     else:
         try:
-            # 1. PDF
             pdf = FPDF()
             pdf.add_page()
             pdf.set_fill_color(30, 30, 30); pdf.rect(0, 0, 210, 45, 'F')
@@ -160,11 +169,9 @@ if st.sidebar.button("✅ FINALIZAR E ENVIAR"):
                 pdf.cell(90, 6, f"OV: {p.get('Overall', p.get('overall'))}", 0, align='R', ln=True)
             pdf_out = pdf.output(dest='S').encode('latin-1')
 
-            # 2. CSV
             df_csv = pd.DataFrame(elenco_final).drop(columns=['TIPO'], errors='ignore')
             csv_str = df_csv.to_csv(sep=';', index=False, encoding='utf-8-sig')
 
-            # 3. ENVIO
             msg = MIMEMultipart()
             msg['From'], msg['To'] = EMAIL_REMETENTE, EMAIL_DESTINO
             msg['Subject'] = f"Inscrição PES: {nome_time}"
