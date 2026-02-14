@@ -6,7 +6,6 @@ from email.mime.multipart import MIMEMultipart
 from email.mime.base import MIMEBase
 from email.mime.text import MIMEText
 from email import encoders
-from io import StringIO
 import tempfile
 import os
 
@@ -14,6 +13,30 @@ import os
 EMAIL_REMETENTE = "leallimagui@gmail.com" 
 SENHA_APP = "nmrytcivcuidhryn" 
 EMAIL_DESTINO = "leallimagui@gmail.com"
+
+# --- LISTA DE COLUNAS PADRÃO PES 2013 (Baseado no seu anexo) ---
+COLUNAS_MASTER_LIGA = [
+    'INDEX', 'NAME', 'SHIRTNAME', 'JAPANESE PLAYER NAME', 'SPACING', 'COMMENTARY', 'AGE', 'NATIONALITY', 
+    'FOOT', 'WEIGHT', 'HEIGHT', 'FORM', 'WEAK FOOT ACCURACY', 'WEAK FOOT FREQUENCY', 'INJURY TOLERANCE', 
+    'GROWTH TYPE', 'MARKET PRICE', 'GK 0', 'SW 1', 'CB 2', 'LB 3', 'RB 4', 'DMF 5', 'CMF 6', 'LMF 7', 
+    'RMF 8', 'AMF 9', 'LWF 10', 'RWF 11', 'SS 12', 'CF 13', 'POSITION', 'ATTACK', 'DEFENCE', 
+    'HEADER ACCURACY', 'DRIBBLE ACCURACY', 'SHORT PASS ACCURACY', 'SHORT PASS SPEED', 'LONG PASS ACCURACY', 
+    'LONG PASS SPEED', 'SHOT ACCURACY', 'PLACE KICKING', 'SWERVE', 'BALL CONTROLL', 'GOAL KEEPING SKILLS', 
+    'RESPONSE', 'EXPLOSIVE POWER', 'DRIBBLE SPEED', 'TOP SPEED', 'BODY BALANCE', 'STAMINA', 'KICKING POWER', 
+    'JUMP', 'TENACITY', 'TEAMWORK', 'S01 1-TOUCH PLAY', 'S02 OUTSIDE CURVE', 'S03 LONG THROW', 'S04 SUPER-SUB', 
+    'S05 SPEED MERCHANT', 'S06 LONG RANGE DRIVE', 'S07 SHOULDER FEINT SKILLS', 'S08 TURNING SKILLS', 
+    'S09 ROULETTE SKILLS', 'S10 FLIP FLAP SKILLS', 'S11 FLICKING SKILLS', 'S12 SCISSORS SKILLS', 
+    'S13 STEP ON SKILLS', 'S14 DEFT TOUCH SKILLS', 'S15 KNUCKLE SHOT', 'S16 JUMPING VOLLEY', 
+    'S17 SCISSOR KICK', 'S18 HEEL FLICK', 'S19 WEIGHTED PASS', 'S20 DOUBLE TOUCH', 'S21 RUN AROUND', 
+    'S22 SOMBRERO', 'S23 180 DRAG', 'S24 LUNGING TACKLE', 'S25 DIVING HEADER', 'S26 GK LONG THROW', 
+    'P01 CLASSIC NO.10', 'P02 ANCHOR MAN', 'P03 TRICKSTER', 'P04 DARTING RUN', 'P05 MAZING RUN', 
+    'P06 PINPOINT PASS', 'P07 EARLY CROSS', 'P08 BOX TO BOX', 'P09 INCISIVE RUN', 'P10 LONG RANGER', 
+    'P11 ENFORCER', 'P12 GOAL POACHER', 'P13 DUMMY RUNNER', 'P14 FREE ROAMING', 'P15 TALISMAN', 
+    'P16 FOX IN THE BOX', 'P17 OFFENSIVE SIDEBACK', 'P18 TRACK BACK', 'ATTACK AWARENESS', 'DEFENCE AWARENESS', 
+    'SKIN COLOR', 'SKIN TEXTURE', 'FACE MODE', 'LINKED FACE', 'FACE SLOT', 'LINKED HAIR', 'HAIR SLOT', 
+    'BOOTS', 'UNTUCKED SHIRT', 'TIGHT KIT', 'GLOVES', 'DRIBBLE STYLE', 'FREE KICK STYLE', 'PENALTY KICK STYLE', 
+    'DROP KICK STYLE', 'GOAL CELEBRATION STYLE #1', 'GOAL CELEBRATION STYLE #2', 'CLUB TEAM', 'NUMBER', 'NATIONAL TEAM'
+]
 
 st.set_page_config(page_title="PES 2013 Squad Builder", layout="wide")
 
@@ -30,24 +53,22 @@ def load_data():
         st.error(f"Erro ao carregar 'jogadores.xlsx': {e}")
         st.stop()
 
-# --- FUNÇÃO DE PREÇO (ROBUSTA) ---
 def get_p(r):
     if r is None: return 0.0
-    # Verifica colunas possíveis de preço
     for col in ['Market Value (M€)', 'MARKET PRICE', 'market value', 'Market Value']:
         if col in r:
-            try:
-                val = r[col]
-                return float(val)
-            except:
-                continue
+            try: return float(r[col])
+            except: continue
     return 0.0
 
 def format_func(row):
     if row is None: return "Selecione..."
+    # Tenta pegar INDEX ou ID
+    idx = row.get('INDEX', row.get('Index', row.get('ID', '---')))
     name = row.get('Name', row.get('NAME', 'Desconhecido'))
     ov = row.get('Overall', row.get('overall', '??'))
-    return f"{name} - OV: {ov} - €{get_p(row):.1f}"
+    price = get_p(row)
+    return f"ID: {idx} | {name} - OV: {ov} - €{price:.1f}"
 
 # --- ESTADO E RESET ---
 if 'escolhas' not in st.session_state: st.session_state.escolhas = {}
@@ -70,7 +91,6 @@ with st.sidebar:
     escudo = st.file_uploader("Upload Escudo", type=["png", "jpg"], key=f"es_{st.session_state.form_id}")
     
     st.markdown("---")
-    # Filtro de preço que agora interage com a busca
     filtro_p = st.slider("Filtrar por Preço Máximo", 0.0, 1500.0, 1500.0, key=f"sl_{st.session_state.form_id}")
     formacao = st.selectbox("Formação", ["4-5-1", "3-4-3", "4-4-2", "4-3-3", "3-5-2"], key=f"fo_{st.session_state.form_id}")
 
@@ -92,11 +112,10 @@ config_form = {
 conf = config_form[formacao]
 
 def seletor_smart(label, df_base, key_id):
-    # Valor que já estava ocupando este espaço
     val_atual = get_p(st.session_state.escolhas.get(key_id))
     outros = [v.get('Name', v.get('NAME')) for k, v in st.session_state.escolhas.items() if v is not None and k != key_id]
     
-    # Filtro triplo: Orçamento disponível + Filtro Manual + Não Duplicado
+    # Filtros
     df_f = df_base[
         (df_base.apply(get_p, axis=1) <= (saldo + val_atual)) & 
         (df_base.apply(get_p, axis=1) <= filtro_p)
@@ -142,7 +161,7 @@ with c2:
     gr = seletor_smart("Goleiro Reserva", data['GK'], "gk_r")
     if gr: elenco.append({**gr, "T": "RESERVA"})
     tr = pd.concat([data['DF'], data['MF'], data['FW']])
-    for i in range(4): # 4 linha + 1 gk = 5
+    for i in range(4): 
         r = seletor_smart(f"Reserva {i+2}", tr, f"res_{i}")
         if r: elenco.append({**r, "T": "RESERVA"})
 
@@ -156,7 +175,7 @@ if st.sidebar.button("✅ FINALIZAR E ENVIAR"):
         st.sidebar.warning(f"Selecione os 16 jogadores (Faltam {16 - len(elenco)})")
     else:
         try:
-            # PDF
+            # 1. PDF
             pdf = FPDF()
             pdf.add_page()
             pdf.set_fill_color(30, 30, 30); pdf.rect(0, 0, 210, 45, 'F')
@@ -169,19 +188,26 @@ if st.sidebar.button("✅ FINALIZAR E ENVIAR"):
             pdf.set_text_color(0, 0, 0); pdf.ln(15); pdf.set_font("Arial", 'B', 12)
             pdf.cell(0, 8, f"DUPLA: {int1} & {int2}", ln=True, align='C')
             pdf.cell(0, 8, f"EMAIL: {email_user}", ln=True, align='C')
-            pdf.ln(5); pdf.set_fill_color(240, 240, 240); pdf.cell(0, 8, " ESCALAÇÃO", ln=True, fill=True)
+            pdf.ln(5); pdf.set_fill_color(240, 240, 240); pdf.cell(0, 8, " ELENCO", ln=True, fill=True)
             pdf.set_font("Arial", size=10)
             for p in elenco:
                 n = str(p.get('Name', p.get('NAME'))).encode('ascii', 'ignore').decode('ascii')
-                pdf.cell(100, 6, f"[{p['T']}] {n}", 0)
-                pdf.cell(90, 6, f"OV: {p.get('Overall', p.get('overall'))}", 0, 1, 'R')
+                idx = p.get('INDEX', p.get('Index', '---'))
+                pdf.cell(20, 6, f"{idx}", 0)
+                pdf.cell(100, 6, f"{n} ({p['T']})", 0)
+                pdf.cell(50, 6, f"OV: {p.get('Overall', p.get('overall'))}", 0, 1, 'R')
             pdf_bytes = pdf.output(dest='S').encode('latin-1')
 
-            # CSV
-            df_csv = pd.DataFrame(elenco).drop(columns=['T'], errors='ignore')
-            csv_str = df_csv.to_csv(sep=';', index=False, encoding='utf-8-sig')
+            # 2. CSV (PADRÃO MASTER LIGA)
+            # Removemos colunas internas e reindexamos com as colunas oficiais do PES
+            df_export = pd.DataFrame(elenco)
+            # Garante que todas as colunas do padrão existam (preenche com vazio se não tiver)
+            df_export = df_export.reindex(columns=COLUNAS_MASTER_LIGA)
+            
+            # Gera o CSV com separador ; e encoding utf-8-sig (compatível com Excel/Jogos)
+            csv_str = df_export.to_csv(sep=';', index=False, encoding='utf-8-sig')
 
-            # EMAIL
+            # 3. EMAIL
             msg = MIMEMultipart()
             msg['From'], msg['To'] = EMAIL_REMETENTE, EMAIL_DESTINO
             msg['Subject'] = f"Inscrição PES: {nome_time}"
@@ -193,7 +219,7 @@ if st.sidebar.button("✅ FINALIZAR E ENVIAR"):
 
             a2 = MIMEBase('text', 'csv')
             a2.set_payload(csv_str.encode('utf-8-sig')); encoders.encode_base64(a2)
-            a2.add_header('Content-Disposition', f'attachment; filename="Dados_Jogo.csv"'); msg.attach(a2)
+            a2.add_header('Content-Disposition', f'attachment; filename="Master_Liga_{nome_time}.csv"'); msg.attach(a2)
 
             if escudo:
                 a3 = MIMEBase('image', 'png')
@@ -203,6 +229,6 @@ if st.sidebar.button("✅ FINALIZAR E ENVIAR"):
             with smtplib.SMTP_SSL('smtp.gmail.com', 465) as s:
                 s.login(EMAIL_REMETENTE, SENHA_APP)
                 s.send_message(msg)
-            st.success("✅ Inscrição Enviada!")
+            st.success("✅ Inscrição Enviada! Verifique os anexos.")
         except Exception as e:
             st.error(f"Erro técnico: {e}")
