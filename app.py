@@ -16,7 +16,7 @@ SENHA_APP = "nmrytcivcuidhryn"
 EMAIL_DESTINO = "leallimagui@gmail.com"
 ORCAMENTO_MAX = 2000.0
 
-# Colunas Obrigatórias do PES 2013 (Ordem exata)
+# Colunas Obrigatórias do PES 2013 (Master Liga)
 COLUNAS_MASTER_LIGA = [
     'INDEX', 'NAME', 'SHIRTNAME', 'JAPANESE PLAYER NAME', 'SPACING', 'COMMENTARY', 'AGE', 'NATIONALITY', 
     'FOOT', 'WEIGHT', 'HEIGHT', 'FORM', 'WEAK FOOT ACCURACY', 'WEAK FOOT FREQUENCY', 'INJURY TOLERANCE', 
@@ -54,7 +54,7 @@ def clean_price(val):
 @st.cache_data
 def load_data():
     try:
-        # 1. Carrega dados visuais (EXCEL)
+        # 1. Carrega dados visuais (EXCEL - Site)
         file_ui = "jogadores.xlsx"
         tabs = ['GK', 'DF', 'MF', 'FW']
         data_ui = {}
@@ -62,7 +62,7 @@ def load_data():
             df = pd.read_excel(file_ui, sheet_name=tab)
             df.columns = df.columns.str.strip().str.upper()
             
-            # Pega a 1ª coluna como ID
+            # Pega a 1ª coluna como ID (INDEX)
             col_id = df.columns[0]
             df.rename(columns={col_id: 'INDEX'}, inplace=True)
             
@@ -79,14 +79,30 @@ def load_data():
             
             data_ui[tab] = df
 
-        # 2. Carrega banco de dados completo (CSV)
+        # 2. Carrega banco de dados completo (CSV - Jogo)
         file_raw = "jogadoresdata.csv"
-        # Tenta ler com ; ou ,
+        df_raw = None
+        
+        # Tentativa 1: UTF-8 com Ponto e Vírgula
         try:
             df_raw = pd.read_csv(file_raw, sep=';', encoding='utf-8-sig')
-        except:
-            df_raw = pd.read_csv(file_raw, sep=',', encoding='utf-8-sig')
-            
+        except UnicodeDecodeError:
+            # Tentativa 2: Latin-1 (Resolve o erro do byte 0xc1)
+            try:
+                df_raw = pd.read_csv(file_raw, sep=';', encoding='latin-1')
+            except:
+                pass # Tenta próximo separador
+
+        # Se falhou, tenta com vírgula
+        if df_raw is None:
+            try:
+                df_raw = pd.read_csv(file_raw, sep=',', encoding='utf-8-sig')
+            except UnicodeDecodeError:
+                df_raw = pd.read_csv(file_raw, sep=',', encoding='latin-1')
+
+        if df_raw is None:
+            raise Exception("Não foi possível ler 'jogadoresdata.csv'. Verifique encoding ou separador.")
+
         df_raw.columns = df_raw.columns.str.strip().str.upper()
         
         # Garante que temos a coluna INDEX para cruzar
@@ -174,7 +190,7 @@ st.title(f"⚽ {nome_time.upper()}")
 config = {"4-5-1": {"Z":2,"L":2,"M":5,"A":1}, "3-4-3": {"Z":3,"L":2,"M":2,"A":3}, "4-4-2": {"Z":2,"L":2,"M":4,"A":2}, "4-3-3": {"Z":2,"L":2,"M":3,"A":3}, "3-5-2": {"Z":3,"L":2,"M":3,"A":2}}[formacao]
 
 c1, c2 = st.columns([2, 1])
-lista_visual = [] # Para o PDF
+lista_visual = []
 
 with c1:
     st.subheader("Titulares")
@@ -210,18 +226,20 @@ if st.sidebar.button("✅ ENVIAR INSCRIÇÃO"):
     if len(lista_visual) < 16: st.sidebar.warning("Selecione os 16 jogadores."); st.stop()
     
     try:
-        # 1. Recupera IDs selecionados
-        ids_selecionados = [p['INDEX'] for p in lista_visual]
+        # 1. Recupera IDs selecionados (e converte para string para bater com o CSV)
+        ids_selecionados = [str(p['INDEX']).strip() for p in lista_visual]
         
-        # 2. Filtra o arquivo RAW (jogadoresdata.csv) usando esses IDs
-        # Garante que a coluna INDEX seja do mesmo tipo (str/int) para comparar
-        data_raw['INDEX'] = data_raw['INDEX'].astype(str)
-        ids_selecionados_str = [str(x) for x in ids_selecionados]
+        # 2. Filtra o arquivo RAW (jogadoresdata.csv)
+        data_raw['INDEX'] = data_raw['INDEX'].astype(str).str.strip()
         
-        df_export_raw = data_raw[data_raw['INDEX'].isin(ids_selecionados_str)].copy()
+        # Faz o match apenas das linhas que têm o ID igual aos escolhidos
+        df_export_raw = data_raw[data_raw['INDEX'].isin(ids_selecionados)].copy()
         
-        # 3. Ordena e Organiza as colunas para o PES
-        # Reindexa para garantir que todas as colunas do jogo estejam presentes e na ordem certa
+        # Verifica se achou todos
+        if len(df_export_raw) < len(ids_selecionados):
+            st.warning(f"Atenção: Apenas {len(df_export_raw)} de {len(ids_selecionados)} jogadores foram encontrados no banco de dados completo. Verifique se os IDs conferem.")
+        
+        # 3. Organiza colunas
         df_export_final = df_export_raw.reindex(columns=COLUNAS_MASTER_LIGA)
         
         # CSV Final
@@ -242,10 +260,10 @@ if st.sidebar.button("✅ ENVIAR INSCRIÇÃO"):
         pdf.cell(0, 6, f"E-mail: {email_user}", 0, 1, 'C')
         pdf.ln(5)
         
-        # Lista simples no PDF
         for p in lista_visual:
             n = str(p.get('NAME','')).encode('latin-1','ignore').decode('latin-1')
-            pdf.cell(20, 8, str(p.get('INDEX','')), 1, 0, 'C')
+            idx = str(p.get('INDEX',''))
+            pdf.cell(20, 8, idx, 1, 0, 'C')
             pdf.cell(100, 8, f"{n} ({p['TIPO']})", 1, 0, 'L')
             pdf.cell(30, 8, f"€{p.get('MARKET PRICE',0):.1f}", 1, 1, 'C')
             
