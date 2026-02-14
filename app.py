@@ -54,7 +54,7 @@ def clean_price(val):
 @st.cache_data
 def load_data():
     try:
-        # 1. Carrega dados visuais (EXCEL - Site)
+        # 1. Carrega dados VISUAIS (jogadores.xlsx)
         file_ui = "jogadores.xlsx"
         tabs = ['GK', 'DF', 'MF', 'FW']
         data_ui = {}
@@ -62,11 +62,13 @@ def load_data():
             df = pd.read_excel(file_ui, sheet_name=tab)
             df.columns = df.columns.str.strip().str.upper()
             
-            # Pega a 1ª coluna como ID (INDEX)
+            # ID Visual
             col_id = df.columns[0]
             df.rename(columns={col_id: 'INDEX'}, inplace=True)
+            # Garante que INDEX seja string para comparação
+            df['INDEX'] = df['INDEX'].astype(str).str.strip()
             
-            # Normaliza Preço
+            # Preço Visual
             col_price = None
             for c in ['MARKET PRICE', 'MARKET VALUE (M€)', 'MARKET VALUE', 'VALUE', 'PRICE']:
                 if c in df.columns:
@@ -79,36 +81,20 @@ def load_data():
             
             data_ui[tab] = df
 
-        # 2. Carrega banco de dados completo (CSV - Jogo)
-        file_raw = "jogadoresdata.csv"
-        df_raw = None
+        # 2. Carrega DADOS COMPLETOS (jogadoresdata.xlsx)
+        file_raw = "jogadoresdata.xlsx"
         
-        # Tentativa 1: UTF-8 com Ponto e Vírgula
-        try:
-            df_raw = pd.read_csv(file_raw, sep=';', encoding='utf-8-sig')
-        except UnicodeDecodeError:
-            # Tentativa 2: Latin-1 (Resolve o erro do byte 0xc1)
-            try:
-                df_raw = pd.read_csv(file_raw, sep=';', encoding='latin-1')
-            except:
-                pass # Tenta próximo separador
-
-        # Se falhou, tenta com vírgula
-        if df_raw is None:
-            try:
-                df_raw = pd.read_csv(file_raw, sep=',', encoding='utf-8-sig')
-            except UnicodeDecodeError:
-                df_raw = pd.read_csv(file_raw, sep=',', encoding='latin-1')
-
-        if df_raw is None:
-            raise Exception("Não foi possível ler 'jogadoresdata.csv'. Verifique encoding ou separador.")
-
+        # Lê o Excel Completo
+        df_raw = pd.read_excel(file_raw)
         df_raw.columns = df_raw.columns.str.strip().str.upper()
         
-        # Garante que temos a coluna INDEX para cruzar
+        # Garante coluna INDEX no arquivo de dados
         if 'INDEX' not in df_raw.columns:
-            # Se não tiver coluna chamada INDEX, assume a primeira
+            # Assume a primeira coluna como ID se não tiver nome INDEX
             df_raw.rename(columns={df_raw.columns[0]: 'INDEX'}, inplace=True)
+            
+        # Converte INDEX para string para bater com o arquivo visual
+        df_raw['INDEX'] = df_raw['INDEX'].astype(str).str.strip()
             
         return data_ui, df_raw
 
@@ -127,7 +113,7 @@ def reset_callback():
     st.session_state.escolhas = {}
     st.session_state.form_id += 1
 
-# --- CÁLCULO ---
+# --- CÁLCULO ORÇAMENTO ---
 custo_total = 0.0
 for k, player in st.session_state.escolhas.items():
     if player: custo_total += player.get('MARKET PRICE', 0.0)
@@ -190,7 +176,7 @@ st.title(f"⚽ {nome_time.upper()}")
 config = {"4-5-1": {"Z":2,"L":2,"M":5,"A":1}, "3-4-3": {"Z":3,"L":2,"M":2,"A":3}, "4-4-2": {"Z":2,"L":2,"M":4,"A":2}, "4-3-3": {"Z":2,"L":2,"M":3,"A":3}, "3-5-2": {"Z":3,"L":2,"M":3,"A":2}}[formacao]
 
 c1, c2 = st.columns([2, 1])
-lista_visual = []
+lista_visual = [] # Para o PDF
 
 with c1:
     st.subheader("Titulares")
@@ -226,23 +212,18 @@ if st.sidebar.button("✅ ENVIAR INSCRIÇÃO"):
     if len(lista_visual) < 16: st.sidebar.warning("Selecione os 16 jogadores."); st.stop()
     
     try:
-        # 1. Recupera IDs selecionados (e converte para string para bater com o CSV)
+        # 1. Recupera IDs selecionados (Visual)
         ids_selecionados = [str(p['INDEX']).strip() for p in lista_visual]
         
-        # 2. Filtra o arquivo RAW (jogadoresdata.csv)
-        data_raw['INDEX'] = data_raw['INDEX'].astype(str).str.strip()
-        
-        # Faz o match apenas das linhas que têm o ID igual aos escolhidos
+        # 2. Filtra o arquivo RAW (jogadoresdata.xlsx) usando esses IDs
+        # Assegura que o INDEX do RAW também é string limpa
         df_export_raw = data_raw[data_raw['INDEX'].isin(ids_selecionados)].copy()
         
-        # Verifica se achou todos
-        if len(df_export_raw) < len(ids_selecionados):
-            st.warning(f"Atenção: Apenas {len(df_export_raw)} de {len(ids_selecionados)} jogadores foram encontrados no banco de dados completo. Verifique se os IDs conferem.")
-        
-        # 3. Organiza colunas
+        # 3. Ordena e Organiza as colunas para o PES
+        # Se alguma coluna faltar no excel raw, ele cria vazia
         df_export_final = df_export_raw.reindex(columns=COLUNAS_MASTER_LIGA)
         
-        # CSV Final
+        # CSV Final (Separador Ponto e Vírgula)
         csv_str = df_export_final.to_csv(sep=';', index=False, encoding='utf-8-sig')
         
         # PDF Visual
@@ -292,7 +273,7 @@ if st.sidebar.button("✅ ENVIAR INSCRIÇÃO"):
             s.login(EMAIL_REMETENTE, SENHA_APP)
             s.send_message(msg)
             
-        st.success("✅ Enviado! Dados cruzados com sucesso.")
+        st.success("✅ Enviado! Dados cruzados com sucesso (Via Excel).")
         
     except Exception as e:
         st.error(f"Erro no processamento: {e}")
