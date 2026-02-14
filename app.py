@@ -10,7 +10,7 @@ from io import BytesIO
 
 # --- CONFIGURAÇÕES DE E-MAIL ---
 EMAIL_REMETENTE = "seu_email@gmail.com" 
-SENHA_APP = "nmry tciv cuid hryn" 
+SENHA_APP = "nmrytcivcuidhryn" 
 EMAIL_DESTINO = "leallimagui@gmail.com"
 
 st.set_page_config(page_title="Inscrição PES 2013", layout="wide")
@@ -185,3 +185,4 @@ if st.sidebar.button("✅ FINALIZAR INSCRIÇÃO"):
             st.success("✅ Inscrição enviada com sucesso!")
         except Exception as e:
             st.error(f"Erro ao enviar: {e}")
+
