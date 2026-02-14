@@ -122,7 +122,9 @@ with st.sidebar:
     st.metric("Saldo", f"€{saldo:.1f}", delta=f"{saldo:.1f}")
     
     st.markdown("---")
-    filtro_p = st.slider("Preço Máximo", 0.0, 1500.0, 1500.0, key=f"flt_{st.session_state.form_id}")
+    # ALTERADO: Number Input para digitar o valor
+    filtro_p = st.number_input("Preço Máximo (€)", min_value=0.0, max_value=3000.0, value=2000.0, step=10.0, key=f"flt_{st.session_state.form_id}")
+    
     formacao = st.selectbox("Formação", ["4-5-1", "3-4-3", "4-4-2", "4-3-3", "3-5-2"], key=f"fmt_{st.session_state.form_id}")
 
 # --- SELETOR ---
@@ -139,12 +141,17 @@ def seletor(label, df, key):
     valor_atual = escolha_atual.get('MARKET PRICE', 0.0) if escolha_atual else 0.0
     usados = [v['NAME'] for k,v in st.session_state.escolhas.items() if v is not None and k != key]
     
+    # Filtra considerando:
+    # 1. Orçamento disponível + valor do jogador atual (troca)
+    # 2. Filtro de preço digitado pelo usuário
+    # 3. Não duplicados
     mask = (df['MARKET PRICE'] <= (saldo + valor_atual)) & (df['MARKET PRICE'] <= filtro_p) & (~df['NAME'].isin(usados))
     df_filtrado = df[mask]
     
     col_ov = 'OVERALL' if 'OVERALL' in df.columns else df.columns[2]
     opcoes = [None] + df_filtrado.sort_values(col_ov, ascending=False).to_dict('records')
     
+    # Mantém o jogador selecionado na lista mesmo se ele fugir do filtro (para visualização)
     if escolha_atual and escolha_atual['NAME'] not in [o['NAME'] for o in opcoes if o]:
         opcoes.insert(1, escolha_atual)
     
@@ -226,7 +233,7 @@ if st.sidebar.button("✅ ENVIAR INSCRIÇÃO"):
         pdf.set_font("Arial", 'B', 24); pdf.set_text_color(255,255,255)
         pdf.set_y(15); pdf.cell(0, 10, nome_time.upper(), 0, 1, 'C')
         
-        # Dados da Dupla (Abaixo do Header)
+        # Dados da Dupla
         pdf.set_text_color(0,0,0); pdf.ln(20)
         pdf.set_font("Arial", '', 12)
         pdf.cell(0, 6, f"Treinadores: {int1} & {int2}", 0, 1, 'C')
@@ -251,21 +258,18 @@ if st.sidebar.button("✅ ENVIAR INSCRIÇÃO"):
                 pos = p.get('POS_DISPLAY', '-')
                 ov = p.get('OVERALL', 0)
                 
-                # Soma para a média
                 try: 
                     ov_val = float(ov)
                     soma_ov_titular += ov_val
                     qtd_titular += 1
                 except: pass
 
-                # Desenha linha: POSIÇÃO | NOME ........... OVERALL
                 pdf.cell(30, 8, pos, 0, 0, 'C')
                 pdf.cell(130, 8, nome, 0, 0, 'L')
                 pdf.set_font("Arial", 'B', 11)
                 pdf.cell(30, 8, str(ov), 0, 1, 'C')
                 pdf.set_font("Arial", '', 11)
                 
-                # Linha fina separadora
                 pdf.set_draw_color(200,200,200)
                 pdf.line(10, pdf.get_y(), 200, pdf.get_y())
 
