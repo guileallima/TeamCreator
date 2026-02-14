@@ -34,31 +34,38 @@ def format_func(row):
     if row is None: return "Selecione..."
     return f"{row['Name']} ({row['Reg. Pos.']}) - OV: {row['Overall']} - €{row['Market Value (M€)']}"
 
-# --- INICIALIZAÇÃO ---
+# --- INICIALIZAÇÃO DE ESTADO ---
+if 'escolhas' not in st.session_state:
+    st.session_state.escolhas = {}
+if 'form_id' not in st.session_state:
+    st.session_state.form_id = 0
+
+def reset_callback():
+    st.session_state.escolhas = {}
+    st.session_state.form_id += 1 # Muda o ID para forçar o reset visual dos componentes
+
 data = load_data()
 ORCAMENTO_MAX = 3000.0
 
-if 'escolhas' not in st.session_state:
-    st.session_state.escolhas = {}
-
+# Cálculo de saldo
 custo_atual = sum([v['Market Value (M€)'] for v in st.session_state.escolhas.values() if v is not None])
 saldo = ORCAMENTO_MAX - custo_atual
 
-# --- INTERFACE ---
 st.title("🏆 Inscrição de Elenco - PES 2013")
 
+# --- BARRA LATERAL ---
 with st.sidebar:
     st.header("Dados da Inscrição")
-    int1 = st.text_input("Integrante 1 (Nome Completo)")
-    int2 = st.text_input("Integrante 2 (Nome Completo)")
-    email_contato = st.text_input("E-mail de Contato")
-    nome_time = st.text_input("Nome do Time", "Meu Time")
+    int1 = st.text_input("Integrante 1 (Nome Completo)", key=f"int1_{st.session_state.form_id}")
+    int2 = st.text_input("Integrante 2 (Nome Completo)", key=f"int2_{st.session_state.form_id}")
+    email_contato = st.text_input("E-mail de Contato", key=f"email_{st.session_state.form_id}")
+    nome_time = st.text_input("Nome do Time", "Meu Time", key=f"time_{st.session_state.form_id}")
     
-    escudo = st.file_uploader("Upload do Escudo", type=["png", "jpg", "jpeg"])
+    escudo = st.file_uploader("Upload do Escudo", type=["png", "jpg", "jpeg"], key=f"logo_{st.session_state.form_id}")
     if escudo: st.image(escudo, width=80)
     
     st.markdown("---")
-    formacao = st.selectbox("Escolha a Formação", ["4-5-1", "3-4-3", "4-4-2", "4-3-3", "3-5-2"])
+    formacao = st.selectbox("Escolha a Formação", ["4-5-1", "3-4-3", "4-4-2", "4-3-3", "3-5-2"], key=f"form_{st.session_state.form_id}")
 
 config_form = {
     "4-5-1": {"ZAG": 2, "LAT": 2, "MEI": 5, "ATA": 1},
@@ -70,24 +77,23 @@ config_form = {
 conf = config_form[formacao]
 
 def seletor_smart(label, df_base, key_id):
+    # Gera uma chave única que muda se o reset for clicado
+    unique_key = f"{key_id}_{st.session_state.form_id}"
+    
     outros_nomes = [v['Name'] for k, v in st.session_state.escolhas.items() if v is not None and k != key_id]
     v_atual = st.session_state.escolhas.get(key_id, {}).get('Market Value (M€)', 0) if st.session_state.escolhas.get(key_id) else 0
+    
     df_f = df_base[(df_base['Market Value (M€)'] <= (saldo + v_atual)) & (~df_base['Name'].isin(outros_nomes))]
     opcoes = [None] + df_f.sort_values('Overall', ascending=False).to_dict('records')
     
-    idx = 0
-    if st.session_state.escolhas.get(key_id):
-        for i, opt in enumerate(opcoes):
-            if opt and opt['Name'] == st.session_state.escolhas[key_id]['Name']:
-                idx = i
-                break
+    sel = st.selectbox(label, opcoes, format_func=format_func, key=unique_key)
     
-    sel = st.selectbox(label, opcoes, index=idx, format_func=format_func, key=key_id)
     if st.session_state.escolhas.get(key_id) != sel:
         st.session_state.escolhas[key_id] = sel
         st.rerun()
     return sel
 
+# --- CORPO DA PÁGINA ---
 col1, col2 = st.columns([2, 1])
 elenco_pdf = []
 
@@ -125,9 +131,9 @@ with col2:
 
 st.sidebar.metric("Orçamento Usado", f"€{custo_atual:.0f}", f"Saldo: €{saldo:.0f}")
 
-if st.button("🔄 Resetar Time"):
-    st.session_state.escolhas = {}
-    st.rerun()
+# Botão Reset com a nova lógica
+if st.button("🔄 Resetar Time", on_click=reset_callback):
+    st.info("Time resetado com sucesso!")
 
 # --- FINALIZAÇÃO E ENVIO ---
 if st.sidebar.button("✅ FINALIZAR INSCRIÇÃO"):
@@ -139,12 +145,9 @@ if st.sidebar.button("✅ FINALIZAR INSCRIÇÃO"):
         try:
             pdf = FPDF()
             pdf.add_page()
-            
-            # Título
             pdf.set_font("Arial", 'B', 20)
             pdf.cell(200, 15, f"{nome_time.upper()}", ln=True, align='C')
             
-            # Imagem no PDF
             if escudo:
                 suffix = os.path.splitext(escudo.name)[1]
                 with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
@@ -156,7 +159,6 @@ if st.sidebar.button("✅ FINALIZAR INSCRIÇÃO"):
             else:
                 pdf.ln(10)
 
-            # Dados
             pdf.set_font("Arial", 'B', 12)
             pdf.cell(200, 8, "INFORMAÇÕES GERAIS:", ln=True)
             pdf.set_font("Arial", size=11)
@@ -175,22 +177,19 @@ if st.sidebar.button("✅ FINALIZAR INSCRIÇÃO"):
             
             pdf_bytes = pdf.output(dest='S').encode('latin-1')
 
-            # E-mail com múltiplos anexos
             msg = MIMEMultipart()
             msg['From'], msg['To'] = EMAIL_REMETENTE, EMAIL_DESTINO
             msg['Subject'] = f"Inscrição: {nome_time} ({int1} / {int2})"
             
-            corpo = f"Nova inscrição recebida.\nTime: {nome_time}\nIntegrantes: {int1} e {int2}\n\nO PDF e o Escudo estão em anexo."
+            corpo = f"Nova inscrição recebida.\nTime: {nome_time}\nIntegrantes: {int1} e {int2}"
             msg.attach(MIMEText(corpo, 'plain'))
             
-            # Anexo 1: PDF
             part_pdf = MIMEBase('application', 'octet-stream')
             part_pdf.set_payload(pdf_bytes)
             encoders.encode_base64(part_pdf)
             part_pdf.add_header('Content-Disposition', f"attachment; filename={nome_time}.pdf")
             msg.attach(part_pdf)
             
-            # Anexo 2: Escudo separado
             if escudo:
                 part_img = MIMEBase('image', os.path.splitext(escudo.name)[1][1:])
                 part_img.set_payload(escudo.getvalue())
@@ -202,6 +201,6 @@ if st.sidebar.button("✅ FINALIZAR INSCRIÇÃO"):
                 server.login(EMAIL_REMETENTE, SENHA_APP)
                 server.send_message(msg)
             
-            st.success("✅ Inscrição enviada! PDF e Escudo anexados.")
+            st.success("✅ Inscrição enviada!")
         except Exception as e:
             st.error(f"Erro: {e}")
