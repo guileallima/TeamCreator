@@ -45,6 +45,7 @@ st.set_page_config(page_title="Squad Builder PES 2013", layout="wide")
 def clean_price(val):
     if pd.isna(val) or val == '': return 0.0
     s_val = str(val)
+    # Remove qualquer coisa que não seja dígito, ponto ou vírgula
     s_val = re.sub(r'[^\d.,]', '', s_val)
     if not s_val: return 0.0
     s_val = s_val.replace(',', '.')
@@ -65,7 +66,6 @@ def load_data():
             # ID Visual
             col_id = df.columns[0]
             df.rename(columns={col_id: 'INDEX'}, inplace=True)
-            # Garante que INDEX seja string para comparação
             df['INDEX'] = df['INDEX'].astype(str).str.strip()
             
             # Preço Visual
@@ -83,17 +83,12 @@ def load_data():
 
         # 2. Carrega DADOS COMPLETOS (jogadoresdata.xlsx)
         file_raw = "jogadoresdata.xlsx"
-        
-        # Lê o Excel Completo
         df_raw = pd.read_excel(file_raw)
         df_raw.columns = df_raw.columns.str.strip().str.upper()
         
-        # Garante coluna INDEX no arquivo de dados
         if 'INDEX' not in df_raw.columns:
-            # Assume a primeira coluna como ID se não tiver nome INDEX
             df_raw.rename(columns={df_raw.columns[0]: 'INDEX'}, inplace=True)
             
-        # Converte INDEX para string para bater com o arquivo visual
         df_raw['INDEX'] = df_raw['INDEX'].astype(str).str.strip()
             
         return data_ui, df_raw
@@ -215,15 +210,13 @@ if st.sidebar.button("✅ ENVIAR INSCRIÇÃO"):
         # 1. Recupera IDs selecionados (Visual)
         ids_selecionados = [str(p['INDEX']).strip() for p in lista_visual]
         
-        # 2. Filtra o arquivo RAW (jogadoresdata.xlsx) usando esses IDs
-        # Assegura que o INDEX do RAW também é string limpa
+        # 2. Filtra o arquivo RAW (jogadoresdata.xlsx)
         df_export_raw = data_raw[data_raw['INDEX'].isin(ids_selecionados)].copy()
         
-        # 3. Ordena e Organiza as colunas para o PES
-        # Se alguma coluna faltar no excel raw, ele cria vazia
+        # 3. Organiza colunas
         df_export_final = df_export_raw.reindex(columns=COLUNAS_MASTER_LIGA)
         
-        # CSV Final (Separador Ponto e Vírgula)
+        # CSV Final
         csv_str = df_export_final.to_csv(sep=';', index=False, encoding='utf-8-sig')
         
         # PDF Visual
@@ -246,7 +239,10 @@ if st.sidebar.button("✅ ENVIAR INSCRIÇÃO"):
             idx = str(p.get('INDEX',''))
             pdf.cell(20, 8, idx, 1, 0, 'C')
             pdf.cell(100, 8, f"{n} ({p['TIPO']})", 1, 0, 'L')
-            pdf.cell(30, 8, f"€{p.get('MARKET PRICE',0):.1f}", 1, 1, 'C')
+            
+            # --- CORREÇÃO AQUI: Troquei o símbolo '€' por 'EUR' para evitar erro latin-1 ---
+            preco = p.get('MARKET PRICE', 0)
+            pdf.cell(30, 8, f"EUR {preco:.1f}", 1, 1, 'C')
             
         pdf_bytes = pdf.output(dest='S').encode('latin-1')
 
