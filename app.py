@@ -6,7 +6,7 @@ from email.mime.multipart import MIMEMultipart
 from email.mime.base import MIMEBase
 from email.mime.text import MIMEText
 from email import encoders
-from io import BytesIO
+from io import BytesIO, StringIO
 import tempfile
 import os
 
@@ -22,23 +22,27 @@ def load_data():
     file = "jogadores.xlsx"
     try:
         tabs = ['GK', 'DF', 'MF', 'FW']
+        # Carrega mantendo todas as colunas para o CSV do jogo
         data = {tab: pd.read_excel(file, sheet_name=tab) for tab in tabs}
         for tab in data:
             data[tab].columns = data[tab].columns.str.strip()
         return data
     except:
-        st.error("Erro ao carregar 'jogadores.xlsx'.")
+        st.error(f"Erro ao carregar '{file}'. Verifique se ele contém as abas GK, DF, MF e FW.")
         st.stop()
 
+# Formatação para o seletor (exibição amigável)
 def format_func(row):
     if row is None: return "Selecione..."
-    return f"{row['Name']} ({row['Reg. Pos.']}) - OV: {row['Overall']} - €{row['Market Value (M€)']}"
+    # Tenta usar 'Name' ou 'NAME' conforme a planilha
+    name_col = 'Name' if 'Name' in row else 'NAME'
+    ov_col = 'Overall' if 'Overall' in row else 'overall'
+    val_col = 'Market Value (M€)' if 'Market Value (M€)' in row else 'MARKET PRICE'
+    return f"{row[name_col]} - OV: {row.get(ov_col, '??')} - €{row.get(val_col, 0)}"
 
-# --- INICIALIZAÇÃO DE ESTADO ---
-if 'escolhas' not in st.session_state:
-    st.session_state.escolhas = {}
-if 'form_id' not in st.session_state:
-    st.session_state.form_id = 0
+# --- INICIALIZAÇÃO ---
+if 'escolhas' not in st.session_state: st.session_state.escolhas = {}
+if 'form_id' not in st.session_state: st.session_state.form_id = 0
 
 def reset_callback():
     st.session_state.escolhas = {}
@@ -47,21 +51,29 @@ def reset_callback():
 data = load_data()
 ORCAMENTO_MAX = 3000.0
 
-# --- INTERFACE ---
-st.title("🏆 Inscrição de Elenco - PES 2013")
+# Cálculo de saldo (procurando a coluna de valor correta)
+def get_val(row):
+    for c in ['Market Value (M€)', 'MARKET PRICE', 'market value']:
+        if c in row: return row[c]
+    return 0
+
+custo_atual = sum([get_val(v) for v in st.session_state.escolhas.values() if v is not None])
+saldo = ORCAMENTO_MAX - custo_atual
+
+st.title("⚽ PES 2013 - Gestão de Elenco")
 
 with st.sidebar:
-    st.header("Dados da Inscrição")
-    int1 = st.text_input("Integrante 1 (Nome Completo)", key=f"int1_{st.session_state.form_id}")
-    int2 = st.text_input("Integrante 2 (Nome Completo)", key=f"int2_{st.session_state.form_id}")
-    email_contato = st.text_input("E-mail de Contato", key=f"email_{st.session_state.form_id}")
-    nome_time = st.text_input("Nome do Time", "Meu Time", key=f"time_{st.session_state.form_id}")
+    st.header("📋 Cadastro do Time")
+    int1 = st.text_input("Integrante 1", key=f"i1_{st.session_state.form_id}")
+    int2 = st.text_input("Integrante 2", key=f"i2_{st.session_state.form_id}")
+    email_contato = st.text_input("E-mail para contato", key=f"em_{st.session_state.form_id}")
+    nome_time = st.text_input("Nome do Time", "MEU TIME", key=f"nt_{st.session_state.form_id}")
     
-    escudo = st.file_uploader("Upload do Escudo", type=["png", "jpg", "jpeg"], key=f"logo_{st.session_state.form_id}")
+    escudo = st.file_uploader("Escudo do Time", type=["png", "jpg"], key=f"esc_{st.session_state.form_id}")
     if escudo: st.image(escudo, width=80)
     
     st.markdown("---")
-    formacao = st.selectbox("Escolha a Formação", ["4-5-1", "3-4-3", "4-4-2", "4-3-3", "3-5-2"], key=f"form_{st.session_state.form_id}")
+    formacao = st.selectbox("Formação Tática", ["4-5-1", "3-4-3", "4-4-2", "4-3-3", "3-5-2"], key=f"f_{st.session_state.form_id}")
 
 config_form = {
     "4-5-1": {"ZAG": 2, "LAT": 2, "MEI": 5, "ATA": 1},
@@ -72,138 +84,143 @@ config_form = {
 }
 conf = config_form[formacao]
 
-# --- FUNÇÃO DE SELEÇÃO CORRIGIDA ---
 def seletor_smart(label, df_base, key_id):
-    # Recalcula o custo total em tempo real com base no que JÁ ESTÁ no session_state
-    custo_total_atual = sum([v['Market Value (M€)'] for k, v in st.session_state.escolhas.items() if v is not None])
-    valor_deste_slot = st.session_state.escolhas.get(key_id, {}).get('Market Value (M€)', 0) if st.session_state.escolhas.get(key_id) else 0
+    u_key = f"{key_id}_{st.session_state.form_id}"
+    v_atual = get_val(st.session_state.escolhas.get(key_id, {}))
+    # Filtro de duplicidade (pelo Nome)
+    outros = [v['Name'] if 'Name' in v else v['NAME'] for k, v in st.session_state.escolhas.items() if v is not None and k != key_id]
     
-    # Saldo real disponível para este slot específico
-    saldo_disponivel = ORCAMENTO_MAX - custo_total_atual + valor_deste_slot
+    df_f = df_base[(df_base.apply(get_val, axis=1) <= (saldo + v_atual))]
+    name_col = 'Name' if 'Name' in df_base.columns else 'NAME'
+    df_f = df_f[~df_f[name_col].isin(outros)]
     
-    outros_nomes = [v['Name'] for k, v in st.session_state.escolhas.items() if v is not None and k != key_id]
+    ov_col = 'Overall' if 'Overall' in df_base.columns else 'overall'
+    opcoes = [None] + df_f.sort_values(ov_col, ascending=False).to_dict('records')
     
-    # Filtra por orçamento e por duplicidade
-    df_f = df_base[(df_base['Market Value (M€)'] <= saldo_disponivel) & (~df_base['Name'].isin(outros_nomes))]
-    
-    opcoes = [None] + df_f.sort_values('Overall', ascending=False).to_dict('records')
-    
-    # Garante que se o jogador já estiver selecionado, ele apareça na lista (mesmo se o saldo mudar)
-    selecionado_agora = st.session_state.escolhas.get(key_id)
-    if selecionado_agora and selecionado_agora['Name'] not in [o['Name'] for o in opcoes if o]:
-        opcoes.append(selecionado_agora)
-
-    sel = st.selectbox(label, opcoes, format_func=format_func, key=f"{key_id}_{st.session_state.form_id}")
-    
+    sel = st.selectbox(label, opcoes, format_func=format_func, key=u_key)
     if st.session_state.escolhas.get(key_id) != sel:
         st.session_state.escolhas[key_id] = sel
         st.rerun()
     return sel
 
-# --- MONTAGEM DO TIME ---
 col1, col2 = st.columns([2, 1])
-elenco_pdf = []
+elenco_completo = []
 
 with col1:
-    st.subheader(f"Titulares ({formacao})")
+    st.subheader(f"Campo de Jogo ({formacao})")
     g = seletor_smart("🧤 Goleiro", data['GK'], "gk_t")
-    if g: elenco_pdf.append({**g, "Slot": "Goleiro"})
+    if g: elenco_completo.append({**g, "CAT": "TITULAR", "POS_ESC": "GK"})
 
     for i in range(conf["ZAG"]):
         s = seletor_smart(f"🛡️ Zagueiro {i+1}", data['DF'], f"zag_{i}")
-        if s: elenco_pdf.append({**s, "Slot": f"Zagueiro {i+1}"})
+        if s: elenco_completo.append({**s, "CAT": "TITULAR", "POS_ESC": "ZAG"})
         
-    df_lat = pd.concat([data['DF'], data['MF']])
     for i in range(conf["LAT"]):
-        s = seletor_smart(f"🏃 Lateral {i+1}", df_lat, f"lat_{i}")
-        if s: elenco_pdf.append({**s, "Slot": f"Lateral {i+1}"})
+        s = seletor_smart(f"🏃 Lateral {i+1}", pd.concat([data['DF'], data['MF']]), f"lat_{i}")
+        if s: elenco_completo.append({**s, "CAT": "TITULAR", "POS_ESC": "LAT"})
 
     for i in range(conf["MEI"]):
         s = seletor_smart(f"🎯 Meio Campo {i+1}", data['MF'], f"mei_{i}")
-        if s: elenco_pdf.append({**s, "Slot": f"Meio Campo {i+1}"})
+        if s: elenco_completo.append({**s, "CAT": "TITULAR", "POS_ESC": "MEI"})
 
     for i in range(conf["ATA"]):
         s = seletor_smart(f"🚀 Atacante {i+1}", data['FW'], f"ata_{i}")
-        if s: elenco_pdf.append({**s, "Slot": f"Atacante {i+1}"})
+        if s: elenco_completo.append({**s, "CAT": "TITULAR", "POS_ESC": "ATA"})
 
 with col2:
-    st.subheader("📋 Reservas")
+    st.subheader("📋 Banco de Reservas")
     gr = seletor_smart("Goleiro Reserva", data['GK'], "gk_r")
-    if gr: elenco_pdf.append({**gr, "Slot": "Reserva GK"})
+    if gr: elenco_completo.append({**gr, "CAT": "RESERVA", "POS_ESC": "GK"})
     
     todos_res = pd.concat([data['DF'], data['MF'], data['FW']])
     for i in range(7):
         r = seletor_smart(f"Reserva {i+2}", todos_res, f"res_{i}")
-        if r: elenco_pdf.append({**r, "Slot": f"Reserva {i+2}"})
+        if r: elenco_completo.append({**r, "CAT": "RESERVA", "POS_ESC": "SUB"})
 
-# --- BARRA LATERAL FINANCEIRA ---
-custo_final = sum([v['Market Value (M€)'] for v in st.session_state.escolhas.values() if v is not None])
-st.sidebar.metric("Orçamento Usado", f"€{custo_final:.0f}", f"Saldo: €{ORCAMENTO_MAX - custo_final:.0f}")
+st.sidebar.metric("Orçamento", f"€{custo_atual:.0f}", f"Saldo: €{saldo:.0f}")
 
-if st.button("🔄 Resetar Time", on_click=reset_callback):
-    st.rerun()
+if st.button("🔄 Reiniciar Seleção", on_click=reset_callback): st.rerun()
 
-# --- FINALIZAÇÃO E ENVIO ---
-if st.sidebar.button("✅ FINALIZAR INSCRIÇÃO"):
-    if not int1 or not int2 or not email_contato:
-        st.sidebar.error("Preencha todos os dados da dupla!")
-    elif len(elenco_pdf) < 19:
-        st.sidebar.warning("Selecione os 19 jogadores!")
+# --- EXPORTAÇÃO ---
+if st.sidebar.button("🚀 FINALIZAR E ENVIAR"):
+    if not int1 or not int2 or len(elenco_completo) < 19:
+        st.sidebar.error("Complete os dados e selecione os 19 jogadores!")
     else:
         try:
+            # 1. GERAR PDF (ESTILO TV)
             pdf = FPDF()
             pdf.add_page()
-            pdf.set_font("Arial", 'B', 20)
-            pdf.cell(200, 15, f"{nome_time.upper()}", ln=True, align='C')
-            if escudo:
-                suffix = os.path.splitext(escudo.name)[1]
-                with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
-                    tmp.write(escudo.getvalue())
-                    tmp_path = tmp.name
-                pdf.image(tmp_path, x=85, y=25, w=40)
-                pdf.ln(45)
-                os.unlink(tmp_path)
-            else: pdf.ln(10)
-
-            pdf.set_font("Arial", 'B', 12)
-            pdf.cell(200, 8, "INFORMAÇÕES GERAIS:", ln=True)
-            pdf.set_font("Arial", size=11)
-            pdf.cell(200, 7, f"Integrante 1: {int1}", ln=True)
-            pdf.cell(200, 7, f"Integrante 2: {int2}", ln=True)
-            pdf.cell(200, 7, f"E-mail: {email_contato}", ln=True)
-            pdf.cell(200, 7, f"Custo Total: EUR {custo_final:.0f} | Formação: {formacao}", ln=True)
-            pdf.ln(5)
-            pdf.set_font("Arial", 'B', 12)
-            pdf.cell(200, 10, "ELENCO ESCOLHIDO:", ln=True)
-            pdf.set_font("Arial", size=10)
-            for p in elenco_pdf:
-                clean_name = str(p['Name']).encode('ascii', 'ignore').decode('ascii')
-                pdf.cell(0, 6, f"{p['Slot']}: {clean_name} ({p['Overall']}) - EUR {p['Market Value (M€)']}", ln=True)
+            pdf.set_fill_color(30, 30, 30)
+            pdf.rect(0, 0, 210, 40, 'F') # Header escuro
             
-            pdf_bytes = pdf.output(dest='S').encode('latin-1')
+            pdf.set_text_color(255, 255, 255)
+            pdf.set_font("Arial", 'B', 24)
+            pdf.cell(190, 20, nome_time.upper(), ln=True, align='C')
+            
+            if escudo:
+                with tempfile.NamedTemporaryFile(delete=False, suffix=".png") as tmp:
+                    tmp.write(escudo.getvalue()); tmp_path = tmp.name
+                pdf.image(tmp_path, x=10, y=5, w=25)
+                os.unlink(tmp_path)
 
+            pdf.set_text_color(0, 0, 0)
+            pdf.ln(25)
+            pdf.set_font("Arial", 'B', 14)
+            pdf.cell(0, 10, f"DUPLA: {int1} & {int2}", ln=True, align='C')
+            pdf.ln(5)
+
+            # Titulares
+            pdf.set_fill_color(200, 200, 200)
+            pdf.cell(0, 8, " ESCALAÇÃO TITULAR", ln=True, fill=True)
+            pdf.set_font("Arial", size=11)
+            for p in [x for x in elenco_completo if x['CAT'] == 'TITULAR']:
+                n = str(p.get('Name', p.get('NAME'))).encode('ascii', 'ignore').decode('ascii')
+                pdf.cell(95, 7, f"({p['POS_ESC']}) {n}", border=0)
+                pdf.cell(95, 7, f"OV: {p.get('Overall', p.get('overall'))}", ln=True, align='R')
+
+            pdf.ln(5)
+            # Reservas
+            pdf.cell(0, 8, " BANCO DE RESERVAS", ln=True, fill=True)
+            for p in [x for x in elenco_completo if x['CAT'] == 'RESERVA']:
+                n = str(p.get('Name', p.get('NAME'))).encode('ascii', 'ignore').decode('ascii')
+                pdf.cell(95, 7, f"   {n}", border=0)
+                pdf.cell(95, 7, f"OV: {p.get('Overall', p.get('overall'))}", ln=True, align='R')
+            
+            pdf_out = pdf.output(dest='S').encode('latin-1')
+
+            # 2. GERAR CSV DO JOGO (PADRÃO MASTER LIGA)
+            df_csv = pd.DataFrame(elenco_completo).drop(columns=['CAT', 'POS_ESC'], errors='ignore')
+            csv_buffer = StringIO()
+            df_csv.to_csv(csv_buffer, sep=';', index=False)
+            csv_out = csv_buffer.getvalue()
+
+            # 3. ENVIAR E-MAIL COM 2 ANEXOS
             msg = MIMEMultipart()
             msg['From'], msg['To'] = EMAIL_REMETENTE, EMAIL_DESTINO
-            msg['Subject'] = f"Inscrição: {nome_time} ({int1} / {int2})"
-            msg.attach(MIMEText(f"Inscrição recebida de {nome_time}.", 'plain'))
+            msg['Subject'] = f"Elenco Confirmado: {nome_time}"
+            msg.attach(MIMEText(f"Inscrição de {int1} e {int2}.\nSeguem anexos o PDF para divulgação e o CSV para o jogo.", 'plain'))
+
+            # Anexo PDF
+            p1 = MIMEBase('application', 'octet-stream')
+            p1.set_payload(pdf_out); encoders.encode_base64(p1)
+            p1.add_header('Content-Disposition', f'attachment; filename="{nome_time}_TV.pdf"'); msg.attach(p1)
+
+            # Anexo CSV
+            p2 = MIMEBase('application', 'octet-stream')
+            p2.set_payload(csv_out.encode('utf-8')); encoders.encode_base64(p2)
+            p2.add_header('Content-Disposition', f'attachment; filename="{nome_time}_Geral.csv"'); msg.attach(p2)
             
-            part_pdf = MIMEBase('application', 'octet-stream')
-            part_pdf.set_payload(pdf_bytes)
-            encoders.encode_base64(part_pdf)
-            part_pdf.add_header('Content-Disposition', f"attachment; filename={nome_time}.pdf")
-            msg.attach(part_pdf)
-            
+            # Anexo Escudo Avulso
             if escudo:
-                part_img = MIMEBase('image', os.path.splitext(escudo.name)[1][1:])
-                part_img.set_payload(escudo.getvalue())
-                encoders.encode_base64(part_img)
-                part_img.add_header('Content-Disposition', f"attachment; filename=ESCUDO_{nome_time}{os.path.splitext(escudo.name)[1]}")
-                msg.attach(part_img)
-            
+                p3 = MIMEBase('image', 'png')
+                p3.set_payload(escudo.getvalue()); encoders.encode_base64(p3)
+                p3.add_header('Content-Disposition', f'attachment; filename="escudo.png"'); msg.attach(p3)
+
             with smtplib.SMTP_SSL('smtp.gmail.com', 465) as server:
                 server.login(EMAIL_REMETENTE, SENHA_APP)
                 server.send_message(msg)
             
-            st.success("✅ Inscrição enviada com sucesso!")
+            st.success("✅ Tudo pronto! Verifique o e-mail com os dois arquivos.")
+            
         except Exception as e:
-            st.error(f"Erro: {e}")
+            st.error(f"Erro na exportação: {e}")
