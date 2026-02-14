@@ -96,10 +96,13 @@ data_ui, data_raw = load_data()
 
 # --- SESSÃO ---
 if 'escolhas' not in st.session_state: st.session_state.escolhas = {}
+# 'form_id' será usado APENAS para os seletores de jogadores
 if 'form_id' not in st.session_state: st.session_state.form_id = 0
 
 def reset_callback():
+    # Limpa apenas as escolhas dos jogadores
     st.session_state.escolhas = {}
+    # Incrementa o ID para forçar APENAS os selectbox a recarregarem
     st.session_state.form_id += 1
 
 # --- CÁLCULO ---
@@ -111,21 +114,22 @@ saldo = ORCAMENTO_MAX - custo_total
 # --- UI ---
 with st.sidebar:
     st.header("📋 Cadastro")
-    int1 = st.text_input("Integrante 1", key=f"i1_{st.session_state.form_id}")
-    int2 = st.text_input("Integrante 2", key=f"i2_{st.session_state.form_id}")
-    email_user = st.text_input("E-mail", key=f"em_{st.session_state.form_id}")
-    nome_time = st.text_input("Nome do Time", "MEU TIME", key=f"tm_{st.session_state.form_id}")
-    escudo = st.file_uploader("Escudo", type=['png','jpg'], key=f"logo_{st.session_state.form_id}")
+    # AQUI MUDOU: Usamos chaves FIXAS (strings estáticas) para que não resetem
+    int1 = st.text_input("Integrante 1", key="input_int1")
+    int2 = st.text_input("Integrante 2", key="input_int2")
+    email_user = st.text_input("E-mail", key="input_email")
+    nome_time = st.text_input("Nome do Time", "MEU TIME", key="input_team")
+    escudo = st.file_uploader("Escudo", type=['png','jpg'], key="input_logo")
     
     st.markdown("---")
     st.metric("Gasto", f"€{custo_total:.1f}")
     st.metric("Saldo", f"€{saldo:.1f}", delta=f"{saldo:.1f}")
     
     st.markdown("---")
-    # ALTERADO: Number Input para digitar o valor
-    filtro_p = st.number_input("Preço Máximo (€)", min_value=0.0, max_value=3000.0, value=2000.0, step=10.0, key=f"flt_{st.session_state.form_id}")
+    # Filtro e Formação também com chaves fixas
+    filtro_p = st.number_input("Preço Máximo (€)", min_value=0.0, max_value=3000.0, value=2000.0, step=10.0, key="input_filter")
     
-    formacao = st.selectbox("Formação", ["4-5-1", "3-4-3", "4-4-2", "4-3-3", "3-5-2"], key=f"fmt_{st.session_state.form_id}")
+    formacao = st.selectbox("Formação", ["4-5-1", "3-4-3", "4-4-2", "4-3-3", "3-5-2"], key="input_formation")
 
 # --- SELETOR ---
 def format_func(row):
@@ -141,17 +145,12 @@ def seletor(label, df, key):
     valor_atual = escolha_atual.get('MARKET PRICE', 0.0) if escolha_atual else 0.0
     usados = [v['NAME'] for k,v in st.session_state.escolhas.items() if v is not None and k != key]
     
-    # Filtra considerando:
-    # 1. Orçamento disponível + valor do jogador atual (troca)
-    # 2. Filtro de preço digitado pelo usuário
-    # 3. Não duplicados
     mask = (df['MARKET PRICE'] <= (saldo + valor_atual)) & (df['MARKET PRICE'] <= filtro_p) & (~df['NAME'].isin(usados))
     df_filtrado = df[mask]
     
     col_ov = 'OVERALL' if 'OVERALL' in df.columns else df.columns[2]
     opcoes = [None] + df_filtrado.sort_values(col_ov, ascending=False).to_dict('records')
     
-    # Mantém o jogador selecionado na lista mesmo se ele fugir do filtro (para visualização)
     if escolha_atual and escolha_atual['NAME'] not in [o['NAME'] for o in opcoes if o]:
         opcoes.insert(1, escolha_atual)
     
@@ -160,6 +159,7 @@ def seletor(label, df, key):
         for i, opt in enumerate(opcoes):
             if opt and opt['NAME'] == escolha_atual['NAME']: idx_sel = i; break
             
+    # AQUI MUDOU: A chave usa 'form_id', então só esse componente reseta
     nova_escolha = st.selectbox(label, opcoes, index=idx_sel, format_func=format_func, key=f"sel_{key}_{st.session_state.form_id}")
     
     if nova_escolha != escolha_atual:
@@ -200,7 +200,8 @@ with c2:
         r = seletor(f"Reserva {i+2}", df_all, f"res_{i}")
         if r: lista_visual.append({**r, "TIPO": "RESERVA", "POS_DISPLAY": "RES"})
 
-if st.button("🔄 Resetar", on_click=reset_callback): pass
+# Botão de Reset
+if st.button("🔄 Resetar Apenas o Time", on_click=reset_callback): pass
 
 # --- EXPORTAÇÃO ---
 if st.sidebar.button("✅ ENVIAR INSCRIÇÃO"):
