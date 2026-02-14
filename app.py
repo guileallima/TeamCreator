@@ -1,117 +1,198 @@
 import streamlit as st
 import pandas as pd
+from fpdf import FPDF
+import smtplib
+from email.mime.multipart import MIMEMultipart
+from email.mime.base import MIMEBase
+from email.mime.text import MIMEText
+from email import encoders
 from io import BytesIO
 
-st.set_page_config(page_title="PES 2013 Squad Selector", layout="wide")
+# --- CONFIGURAÇÕES DE E-MAIL (PREENCHA AQUI) ---
+EMAIL_REMETENTE = "seu_email@gmail.com" 
+SENHA_APP = "nmry tciv cuid hryn" # Aquela senha que você gerou no Google
+EMAIL_DESTINO = "leallimagui@gmail.com"
 
-# 1. Carregamento fixo e otimizado
+st.set_page_config(page_title="Inscrição PES 2013", layout="wide")
+
 @st.cache_data
 def load_data():
     file = "jogadores.xlsx"
-    try:
-        tabs = ['GK', 'DF', 'MF', 'FW']
-        data = {tab: pd.read_excel(file, sheet_name=tab) for tab in tabs}
-        for tab in data:
-            data[tab].columns = data[tab].columns.str.strip()
-        return data
-    except Exception as e:
-        st.error(f"Erro: Certifique-se de que o arquivo '{file}' está no GitHub com as abas GK, DF, MF e FW.")
-        st.stop()
+    tabs = ['GK', 'DF', 'MF', 'FW']
+    data = {tab: pd.read_excel(file, sheet_name=tab) for tab in tabs}
+    for tab in data:
+        data[tab].columns = data[tab].columns.str.strip()
+    return data
 
 def format_func(row):
     if row is None: return "Selecione..."
     return f"{row['Name']} ({row['Reg. Pos.']}) - OV: {row['Overall']} - €{row['Market Value (M€)']}"
 
-# --- Inicialização ---
+# --- INICIALIZAÇÃO ---
 data = load_data()
 ORCAMENTO_MAX = 3000.0
 
 if 'escolhas' not in st.session_state:
     st.session_state.escolhas = {}
 
-# Cálculo imediato de saldo
+# --- LÓGICA DE RESET ---
+def reset_team():
+    st.session_state.escolhas = {}
+    st.rerun()
+
+# --- CÁLCULO DE SALDO ---
 custo_atual = sum([v['Market Value (M€)'] for v in st.session_state.escolhas.values() if v is not None])
 saldo = ORCAMENTO_MAX - custo_atual
 
-# --- Interface ---
-st.title("⚽ Seleção de Elenco - PES 2013")
+# --- INTERFACE ---
+st.title("🏆 Inscrição de Elenco - PES 2013")
 
-nome_time = st.sidebar.text_input("Nome do Time", "Meu Time PES")
-esquema = st.sidebar.selectbox("Esquema Tático", ["442", "352", "451", "433", "343"])
-
-taticas = {"442":(4,4,2), "352":(3,5,2), "451":(4,5,1), "433":(4,3,3), "343":(3,4,3)}
-n_def, n_mei, n_ata = taticas[esquema]
-
-def seletor_veloz(label, df, key_id):
-    # Pega o nome de todos os outros jogadores já escolhidos para retirar da lista
-    outros_nomes = [v['Name'] for k, v in st.session_state.escolhas.items() if v is not None and k != key_id]
+with st.sidebar:
+    st.header("Dados da Dupla")
+    nome_dupla = st.text_input("Nome Completo da Dupla")
+    email_contato = st.text_input("E-mail de Contato")
+    nome_time = st.text_input("Nome do Time", "Meu Time")
     
-    # Valor do jogador que já está neste slot (caso queira trocar, esse valor volta para o saldo)
+    escudo = st.file_uploader("Upload do Escudo do Time", type=["png", "jpg", "jpeg"])
+    if escudo:
+        st.image(escudo, width=100)
+    
+    st.markdown("---")
+    formacao = st.selectbox("Formação", [
+        "4-5-1 (2 ZAG, 2 LAT, 5 MEI, 1 ATA)",
+        "3-4-3 (3 ZAG, 2 LAT, 2 MEI, 3 ATA)",
+        "4-4-2 (2 ZAG, 2 LAT, 4 MEI, 2 ATA)",
+        "4-3-3 (2 ZAG, 2 LAT, 3 MEI, 3 ATA)",
+        "3-5-2 (3 ZAG, 2 LAT, 3 MEI, 2 ATA)"
+    ])
+
+# Definição das regras de posição
+config_form = {
+    "4-5-1 (2 ZAG, 2 LAT, 5 MEI, 1 ATA)": {"ZAG": 2, "LAT": 2, "MEI": 5, "ATA": 1},
+    "3-4-3 (3 ZAG, 2 LAT, 2 MEI, 3 ATA)": {"ZAG": 3, "LAT": 2, "MEI": 2, "ATA": 3},
+    "4-4-2 (2 ZAG, 2 LAT, 4 MEI, 2 ATA)": {"ZAG": 2, "LAT": 2, "MEI": 4, "ATA": 2},
+    "4-3-3 (2 ZAG, 2 LAT, 3 MEI, 3 ATA)": {"ZAG": 2, "LAT": 2, "MEI": 3, "ATA": 3},
+    "3-5-2 (3 ZAG, 2 LAT, 3 MEI, 2 ATA)": {"ZAG": 3, "LAT": 2, "MEI": 3, "ATA": 2}
+}
+conf = config_form[formacao]
+
+def seletor_smart(label, df_base, key_id):
+    outros_nomes = [v['Name'] for k, v in st.session_state.escolhas.items() if v is not None and k != key_id]
     valor_atual = st.session_state.escolhas.get(key_id, {}).get('Market Value (M€)', 0) if st.session_state.escolhas.get(key_id) else 0
     
-    # Filtra: cabe no saldo + não foi escolhido em outro lugar
-    df_f = df[(df['Market Value (M€)'] <= (saldo + valor_atual)) & (~df['Name'].isin(outros_nomes))]
-    
+    df_f = df_base[(df_base['Market Value (M€)'] <= (saldo + valor_atual)) & (~df_base['Name'].isin(outros_nomes))]
     opcoes = [None] + df_f.sort_values('Overall', ascending=False).to_dict('records')
     
-    # Index para manter a seleção ao recarregar
     index_atual = 0
     if st.session_state.escolhas.get(key_id):
-        # Encontra a posição do jogador atual na nova lista filtrada
         for i, opt in enumerate(opcoes):
             if opt and opt['Name'] == st.session_state.escolhas[key_id]['Name']:
                 index_atual = i
                 break
-
-    escolha = st.selectbox(label, opcoes, index=index_atual, format_func=format_func, key=key_id)
     
-    # Se mudar a escolha, atualiza o estado e força o recarregamento para atualizar o saldo na hora
-    if st.session_state.escolhas.get(key_id) != escolha:
-        st.session_state.escolhas[key_id] = escolha
+    sel = st.selectbox(label, opcoes, index=index_atual, format_func=format_func, key=key_id)
+    if st.session_state.escolhas.get(key_id) != sel:
+        st.session_state.escolhas[key_id] = sel
         st.rerun()
-    
-    return escolha
+    return sel
 
+# --- MONTAGEM DO TIME ---
 col1, col2 = st.columns([2, 1])
-elenco_final = []
+elenco_pdf = []
 
 with col1:
-    st.subheader(f"Titulares - {esquema}")
-    g = seletor_veloz("🧤 Goleiro Titular", data['GK'], "gk_t")
-    if g: elenco_final.append({**g, "Pos": "Titular"})
-    
-    for pos, n, aba in [("Defensor", n_def, 'DF'), ("Meio", n_mei, 'MF'), ("Atacante", n_ata, 'FW')]:
-        st.write(f"**{pos}**")
-        c = st.columns(2)
-        for i in range(n):
-            with c[i%2]:
-                sel = seletor_veloz(f"{pos} {i+1}", data[aba], f"{aba}_{i}")
-                if sel: elenco_final.append({**sel, "Pos": "Titular"})
+    st.subheader("Titulares")
+    # Goleiro
+    g = seletor_smart("🧤 Goleiro", data['GK'], "gk_t")
+    if g: elenco_pdf.append({**g, "Slot": "Goleiro"})
+
+    # Zagueiros (Podem ser DF ou GK por erro, mas pela regra: Zagueiros + Laterais)
+    df_zag_lat = pd.concat([data['DF']]) # DF já contém CB, LB, RB no PES
+    for i in range(conf["ZAG"]):
+        s = seletor_smart(f"🛡️ Zagueiro {i+1}", data['DF'], f"zag_{i}")
+        if s: elenco_pdf.append({**s, "Slot": "Zagueiro"})
+        
+    # Laterais (Zagueiros, Laterais ou Meio Campo)
+    df_lat_rules = pd.concat([data['DF'], data['MF']])
+    for i in range(conf["LAT"]):
+        s = seletor_smart(f"🏃 Lateral {i+1}", df_lat_rules, f"lat_{i}")
+        if s: elenco_pdf.append({**s, "Slot": "Lateral"})
+
+    # Meio Campo (Somente Meio Campo)
+    for i in range(conf["MEI"]):
+        s = seletor_smart(f"🎯 Meio Campo {i+1}", data['MF'], f"mei_{i}")
+        if s: elenco_pdf.append({**s, "Slot": "Meio Campo"})
+
+    # Atacante (Somente Atacante)
+    for i in range(conf["ATA"]):
+        s = seletor_smart(f"🚀 Atacante {i+1}", data['FW'], f"ata_{i}")
+        if s: elenco_pdf.append({**s, "Slot": "Atacante"})
 
 with col2:
-    st.subheader("📋 Reservas")
-    gr = seletor_veloz("Goleiro Reserva", data['GK'], "gk_r")
-    if gr: elenco_final.append({**gr, "Pos": "Reserva"})
+    st.subheader("Reservas")
+    gr = seletor_smart("Goleiro Reserva", data['GK'], "gk_r")
+    if gr: elenco_pdf.append({**gr, "Slot": "Reserva GK"})
     
-    todos = pd.concat([data['DF'], data['MF'], data['FW']])
+    # Reservas gerais (DF, MF, FW)
+    todos_res = pd.concat([data['DF'], data['MF'], data['FW']])
     for i in range(7):
-        r = seletor_veloz(f"Reserva {i+2}", todos, f"res_{i}")
-        if r: elenco_final.append({**r, "Pos": "Reserva"})
+        r = seletor_smart(f"Reserva {i+2}", todos_res, f"res_{i}")
+        if r: elenco_pdf.append({**r, "Slot": "Reserva"})
 
-# --- Sidebar Financeira ---
-st.sidebar.markdown("---")
-st.sidebar.metric("Custo Total", f"€{custo_atual:.0f}", f"Saldo: €{saldo:.0f}")
+# --- FOOTER E PDF ---
+st.sidebar.metric("Orçamento Usado", f"€{custo_atual:.0f}", f"Saldo: €{saldo:.0f}")
 
-if elenco_final:
-    df_f = pd.DataFrame(elenco_final)
-    media = df_f['Overall'].mean()
-    st.sidebar.metric("Média Overall", f"{media:.1f}")
+# Botão de Reset no canto inferior direito
+st.markdown("---")
+c1, c2, c3 = st.columns([4,1,1])
+with c3:
+    if st.button("🔄 Resetar Tudo"):
+        reset_team()
 
-    if st.sidebar.button("💾 Exportar para Excel"):
-        out = BytesIO()
-        with pd.ExcelWriter(out, engine='openpyxl') as wr:
-            resumo = [["TIME:", nome_time], ["CUSTO:", custo_atual], ["MÉDIA:", f"{media:.1f}"], ["", ""]]
-            pd.DataFrame(resumo).to_excel(wr, index=False, header=False, sheet_name='Escalacao')
-            df_f.to_excel(wr, index=False, startrow=5, sheet_name='Escalacao')
-        st.sidebar.download_button("Baixar Arquivo", out.getvalue(), f"{nome_time}.xlsx")
+# Envio de PDF
+if st.sidebar.button("✅ FINALIZAR E ENVIAR"):
+    if not nome_dupla or not email_contato:
+        st.sidebar.error("Preencha o nome da dupla e e-mail!")
+    elif len(elenco_pdf) < 18:
+        st.sidebar.warning("Selecione todos os 18 jogadores!")
+    else:
+        try:
+            # Gerar PDF
+            pdf = FPDF()
+            pdf.add_page()
+            pdf.set_font("Arial", 'B', 16)
+            pdf.cell(200, 10, f"Inscricao: {nome_time}", ln=True, align='C')
+            pdf.set_font("Arial", size=12)
+            pdf.cell(200, 10, f"Dupla: {nome_dupla}", ln=True)
+            pdf.cell(200, 10, f"E-mail: {email_contato}", ln=True)
+            pdf.cell(200, 10, f"Custo Total: {custo_atual} | Media Over: {pd.DataFrame(elenco_pdf)['Overall'].mean():.1f}", ln=True)
+            pdf.ln(10)
+            
+            for p in elenco_pdf:
+                pdf.cell(0, 8, f"{p['Slot']}: {p['Name']} ({p['Overall']}) - €{p['Market Value (M€)']}", ln=True)
+            
+            pdf_out = pdf.output(dest='S').encode('latin-1')
 
+            # Enviar E-mail
+            msg = MIMEMultipart()
+            msg['From'] = EMAIL_REMETENTE
+            msg['To'] = EMAIL_DESTINO
+            msg['Subject'] = f"Nova Inscrição PES: {nome_time} - {nome_dupla}"
+            
+            msg.attach(MIMEText(f"Inscrição recebida de {nome_dupla} ({email_contato})", 'plain'))
+            
+            part = MIMEBase('application', 'octet-stream')
+            part.set_payload(pdf_out)
+            encoders.encode_base64(part)
+            part.add_header('Content-Disposition', f"attachment; filename={nome_time}.pdf")
+            msg.attach(part)
+            
+            server = smtplib.SMTP('smtp.gmail.com', 587)
+            server.starttls()
+            server.login(EMAIL_REMETENTE, SENHA_APP)
+            server.send_message(msg)
+            server.quit()
+            
+            st.success("✅ Inscrição enviada com sucesso para a organização!")
+        except Exception as e:
+            st.error(f"Erro ao enviar: {e}")
