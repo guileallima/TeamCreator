@@ -96,13 +96,12 @@ data_ui, data_raw = load_data()
 
 # --- SESSÃO ---
 if 'escolhas' not in st.session_state: st.session_state.escolhas = {}
-# 'form_id' será usado APENAS para os seletores de jogadores
+if 'numeros' not in st.session_state: st.session_state.numeros = {}
 if 'form_id' not in st.session_state: st.session_state.form_id = 0
 
 def reset_callback():
-    # Limpa apenas as escolhas dos jogadores
     st.session_state.escolhas = {}
-    # Incrementa o ID para forçar APENAS os selectbox a recarregarem
+    st.session_state.numeros = {} # Reseta números também
     st.session_state.form_id += 1
 
 # --- CÁLCULO ---
@@ -114,7 +113,6 @@ saldo = ORCAMENTO_MAX - custo_total
 # --- UI ---
 with st.sidebar:
     st.header("📋 Cadastro")
-    # AQUI MUDOU: Usamos chaves FIXAS (strings estáticas) para que não resetem
     int1 = st.text_input("Integrante 1", key="input_int1")
     int2 = st.text_input("Integrante 2", key="input_int2")
     email_user = st.text_input("E-mail", key="input_email")
@@ -126,7 +124,6 @@ with st.sidebar:
     st.metric("Saldo", f"€{saldo:.1f}", delta=f"{saldo:.1f}")
     
     st.markdown("---")
-    # Filtro e Formação também com chaves fixas
     filtro_p = st.number_input("Preço Máximo (€)", min_value=0.0, max_value=3000.0, value=2000.0, step=10.0, key="input_filter")
     
     formacao = st.selectbox("Formação", ["4-5-1", "3-4-3", "4-4-2", "4-3-3", "3-5-2"], key="input_formation")
@@ -159,8 +156,17 @@ def seletor(label, df, key):
         for i, opt in enumerate(opcoes):
             if opt and opt['NAME'] == escolha_atual['NAME']: idx_sel = i; break
             
-    # AQUI MUDOU: A chave usa 'form_id', então só esse componente reseta
-    nova_escolha = st.selectbox(label, opcoes, index=idx_sel, format_func=format_func, key=f"sel_{key}_{st.session_state.form_id}")
+    # Layout em Colunas: Seleção (80%) + Número (20%)
+    c_sel, c_num = st.columns([4, 1])
+    
+    with c_sel:
+        nova_escolha = st.selectbox(label, opcoes, index=idx_sel, format_func=format_func, key=f"sel_{key}_{st.session_state.form_id}")
+    
+    with c_num:
+        # Pega o número salvo ou padrão 0
+        val_num = st.session_state.numeros.get(key, 0)
+        novo_num = st.number_input("Nº", min_value=0, max_value=99, step=1, value=val_num, key=f"num_{key}_{st.session_state.form_id}")
+        st.session_state.numeros[key] = novo_num # Salva no estado
     
     if nova_escolha != escolha_atual:
         st.session_state.escolhas[key] = nova_escolha
@@ -177,30 +183,34 @@ lista_visual = []
 with c1:
     st.subheader("Titulares")
     gk = seletor("🧤 Goleiro", data_ui['GK'], "gk_tit")
-    if gk: lista_visual.append({**gk, "TIPO": "TITULAR", "POS_DISPLAY": "GK"})
+    if gk: lista_visual.append({**gk, "TIPO": "TITULAR", "POS_DISPLAY": "GK", "KEY_NUM": "gk_tit"})
+    
     for i in range(config["Z"]):
         z = seletor(f"🛡️ Zagueiro {i+1}", data_ui['DF'], f"zag_{i}")
-        if z: lista_visual.append({**z, "TIPO": "TITULAR", "POS_DISPLAY": "CB"})
+        if z: lista_visual.append({**z, "TIPO": "TITULAR", "POS_DISPLAY": "CB", "KEY_NUM": f"zag_{i}"})
+        
     for i in range(config["L"]):
         l = seletor(f"🏃 Lateral {i+1}", pd.concat([data_ui['DF'], data_ui['MF']]), f"lat_{i}")
-        if l: lista_visual.append({**l, "TIPO": "TITULAR", "POS_DISPLAY": "LB/RB"})
+        if l: lista_visual.append({**l, "TIPO": "TITULAR", "POS_DISPLAY": "LB/RB", "KEY_NUM": f"lat_{i}"})
+        
     for i in range(config["M"]):
         m = seletor(f"🎯 Meio Campo {i+1}", data_ui['MF'], f"mei_{i}")
-        if m: lista_visual.append({**m, "TIPO": "TITULAR", "POS_DISPLAY": "MF"})
+        if m: lista_visual.append({**m, "TIPO": "TITULAR", "POS_DISPLAY": "MF", "KEY_NUM": f"mei_{i}"})
+        
     for i in range(config["A"]):
         a = seletor(f"🚀 Atacante {i+1}", data_ui['FW'], f"ata_{i}")
-        if a: lista_visual.append({**a, "TIPO": "TITULAR", "POS_DISPLAY": "CF/SS"})
+        if a: lista_visual.append({**a, "TIPO": "TITULAR", "POS_DISPLAY": "CF/SS", "KEY_NUM": f"ata_{i}"})
 
 with c2:
     st.subheader("Reservas (5)")
     gkr = seletor("🧤 Goleiro Reserva", data_ui['GK'], "gk_res")
-    if gkr: lista_visual.append({**gkr, "TIPO": "RESERVA", "POS_DISPLAY": "GK"})
+    if gkr: lista_visual.append({**gkr, "TIPO": "RESERVA", "POS_DISPLAY": "GK", "KEY_NUM": "gk_res"})
+    
     df_all = pd.concat([data_ui['DF'], data_ui['MF'], data_ui['FW']])
     for i in range(4):
         r = seletor(f"Reserva {i+2}", df_all, f"res_{i}")
-        if r: lista_visual.append({**r, "TIPO": "RESERVA", "POS_DISPLAY": "RES"})
+        if r: lista_visual.append({**r, "TIPO": "RESERVA", "POS_DISPLAY": "RES", "KEY_NUM": f"res_{i}"})
 
-# Botão de Reset
 if st.button("🔄 Resetar Apenas o Time", on_click=reset_callback): pass
 
 # --- EXPORTAÇÃO ---
@@ -221,20 +231,17 @@ if st.sidebar.button("✅ ENVIAR INSCRIÇÃO"):
         pdf = FPDF()
         pdf.add_page()
         
-        # Cabeçalho Escuro
+        # Cabeçalho
         pdf.set_fill_color(20,20,20); pdf.rect(0,0,210,40,'F')
         
-        # Escudo
         if escudo:
             with tempfile.NamedTemporaryFile(delete=False, suffix=".png") as tf:
                 tf.write(escudo.getvalue()); tname=tf.name
             pdf.image(tname, x=10, y=5, w=25); os.unlink(tname)
         
-        # Nome do Time
         pdf.set_font("Arial", 'B', 24); pdf.set_text_color(255,255,255)
         pdf.set_y(15); pdf.cell(0, 10, nome_time.upper(), 0, 1, 'C')
         
-        # Dados da Dupla
         pdf.set_text_color(0,0,0); pdf.ln(20)
         pdf.set_font("Arial", '', 12)
         pdf.cell(0, 6, f"Treinadores: {int1} & {int2}", 0, 1, 'C')
@@ -252,12 +259,13 @@ if st.sidebar.button("✅ ENVIAR INSCRIÇÃO"):
         soma_ov_titular = 0
         qtd_titular = 0
         
-        # Lista Titulares
         for p in lista_visual:
             if p['TIPO'] == 'TITULAR':
                 nome = str(p.get('NAME','')).encode('latin-1','ignore').decode('latin-1')
                 pos = p.get('POS_DISPLAY', '-')
                 ov = p.get('OVERALL', 0)
+                # Recupera o número salvo na sessão usando a chave
+                num_camisa = st.session_state.numeros.get(p['KEY_NUM'], 0)
                 
                 try: 
                     ov_val = float(ov)
@@ -265,8 +273,10 @@ if st.sidebar.button("✅ ENVIAR INSCRIÇÃO"):
                     qtd_titular += 1
                 except: pass
 
-                pdf.cell(30, 8, pos, 0, 0, 'C')
-                pdf.cell(130, 8, nome, 0, 0, 'L')
+                # POS | Nº | NOME | OV
+                pdf.cell(20, 8, pos, 0, 0, 'C')
+                pdf.cell(15, 8, str(num_camisa), 0, 0, 'C') # Coluna do Número
+                pdf.cell(125, 8, nome, 0, 0, 'L')
                 pdf.set_font("Arial", 'B', 11)
                 pdf.cell(30, 8, str(ov), 0, 1, 'C')
                 pdf.set_font("Arial", '', 11)
@@ -287,16 +297,18 @@ if st.sidebar.button("✅ ENVIAR INSCRIÇÃO"):
                 nome = str(p.get('NAME','')).encode('latin-1','ignore').decode('latin-1')
                 pos = p.get('POS_DISPLAY', '-')
                 ov = p.get('OVERALL', 0)
+                num_camisa = st.session_state.numeros.get(p['KEY_NUM'], 0)
                 
-                pdf.cell(30, 8, pos, 0, 0, 'C')
-                pdf.cell(130, 8, nome, 0, 0, 'L')
+                pdf.cell(20, 8, pos, 0, 0, 'C')
+                pdf.cell(15, 8, str(num_camisa), 0, 0, 'C')
+                pdf.cell(125, 8, nome, 0, 0, 'L')
                 pdf.set_font("Arial", 'B', 11)
                 pdf.cell(30, 8, str(ov), 0, 1, 'C')
                 pdf.set_font("Arial", '', 11)
                 pdf.set_draw_color(200,200,200)
                 pdf.line(10, pdf.get_y(), 200, pdf.get_y())
         
-        # --- RODAPÉ COM MÉDIA ---
+        # --- RODAPÉ ---
         pdf.ln(10)
         media = soma_ov_titular / qtd_titular if qtd_titular > 0 else 0
         
@@ -330,7 +342,7 @@ if st.sidebar.button("✅ ENVIAR INSCRIÇÃO"):
             s.login(EMAIL_REMETENTE, SENHA_APP)
             s.send_message(msg)
             
-        st.success("✅ Inscrição Enviada com Sucesso! (PDF Limpo + CSV Master Liga)")
+        st.success("✅ Inscrição Enviada com Sucesso!")
         
     except Exception as e:
         st.error(f"Erro no processamento: {e}")
