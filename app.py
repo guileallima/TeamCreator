@@ -135,7 +135,7 @@ st.title("⚽ SQUAD BUILDER")
 
 # --- BLOCO DE CADASTRO (MOBILE FRIENDLY) ---
 with st.expander("📋 Cadastro & Personalização (Clique para Fechar/Abrir)", expanded=True):
-    # Dados Pessoais - ALTERADO AQUI PARA JOGADOR 1 E 2
+    # Dados Pessoais
     c_int1, c_int2 = st.columns(2)
     int1 = c_int1.text_input("Jogador 1", key="input_int1")
     int2 = c_int2.text_input("Jogador 2", key="input_int2")
@@ -285,7 +285,9 @@ if st.button("✅ ENVIAR INSCRIÇÃO AGORA", type="primary", use_container_width
         pdf = FPDF()
         pdf.add_page()
         
+        # HEADER (AJUSTADO PARA A4 COMPACTO)
         pdf.set_fill_color(20,20,20); pdf.rect(0,0,210,50,'F')
+        
         if escudo:
             with tempfile.NamedTemporaryFile(delete=False, suffix=".png") as tf:
                 tf.write(escudo.getvalue()); tname=tf.name
@@ -295,38 +297,45 @@ if st.button("✅ ENVIAR INSCRIÇÃO AGORA", type="primary", use_container_width
         if arquivo_camisa and os.path.exists(arquivo_camisa):
             pdf.image(arquivo_camisa, x=170, y=5, w=30)
         
+        # Titulo
         pdf.set_font("Arial", 'B', 24); pdf.set_text_color(255,255,255)
         pdf.set_y(12); pdf.cell(0, 10, nome_time.upper(), 0, 1, 'C')
         
+        # Subtitulo (Infos)
         pdf.set_font("Arial", '', 10)
         pdf.set_y(25)
-        # ALTERADO PARA JOGADORES
         pdf.cell(0, 5, f"Jogadores: {int1} & {int2}", 0, 1, 'C')
         pdf.cell(0, 5, f"Formação: {formacao} | E-mail: {email_user}", 0, 1, 'C')
         
-        pdf.set_y(38)
-        pdf.cell(65, 5, "", 0, 0) 
-        pdf.cell(20, 5, "Cores:", 0, 0, 'R')
+        # Uniforme e Cores (Ajustado)
+        pdf.cell(0, 5, f"Uniforme: {modelo_camisa}", 0, 1, 'C')
         
+        # Desenha as cores logo abaixo do texto do uniforme
+        pdf.set_y(41) # Ajuste fino da posição Y
         cores_escolhidas = [cor1, cor2]
         if qtd_cores == 3: cores_escolhidas.append(cor3)
         
-        x_cor = 90
+        # Calcula centro para as cores
+        largura_blocos = len(cores_escolhidas) * 7
+        x_start = (210 - largura_blocos) / 2
+        
         for c_nome in cores_escolhidas:
             rgb = MAPA_CORES.get(c_nome, (255,255,255))
             pdf.set_fill_color(*rgb)
-            pdf.rect(x_cor, 38, 5, 5, 'F')
-            x_cor += 7
+            pdf.rect(x_start, 41, 5, 5, 'F')
+            x_start += 7
             
-        pdf.ln(20)
+        pdf.ln(15) # Espaço após o header
+        
         pdf.set_text_color(0,0,0)
         
+        # FUNÇÃO DE TABELA COMPACTA (FONTE 9)
         def print_tabela(titulo, tipo_filtro):
             pdf.set_fill_color(220, 220, 220)
-            pdf.set_font("Arial", 'B', 12)
-            pdf.cell(0, 8, f"  {titulo}", 0, 1, 'L', fill=True)
+            pdf.set_font("Arial", 'B', 10) # Titulo um pouco menor
+            pdf.cell(0, 6, f"  {titulo}", 0, 1, 'L', fill=True) # Altura header reduzida
             pdf.ln(1)
-            pdf.set_font("Arial", '', 10)
+            pdf.set_font("Arial", '', 9) # Fonte da lista reduzida para 9
             
             soma = 0; qtd = 0
             for p in lista:
@@ -339,21 +348,23 @@ if st.button("✅ ENVIAR INSCRIÇÃO AGORA", type="primary", use_container_width
                     try: soma += float(ov); qtd += 1
                     except: pass
                     
-                    pdf.cell(20, 7, p['P'], 0, 0, 'C')
-                    pdf.cell(15, 7, str(num), 0, 0, 'C')
-                    pdf.cell(125, 7, n, 0, 0, 'L')
-                    pdf.set_font("Arial", 'B', 10)
-                    pdf.cell(30, 7, str(ov), 0, 1, 'C')
-                    pdf.set_font("Arial", '', 10)
+                    # Altura da linha reduzida para 6mm
+                    pdf.cell(20, 6, p['P'], 0, 0, 'C')
+                    pdf.cell(15, 6, str(num), 0, 0, 'C')
+                    pdf.cell(125, 6, n, 0, 0, 'L')
+                    pdf.set_font("Arial", 'B', 9)
+                    pdf.cell(30, 6, str(ov), 0, 1, 'C')
+                    pdf.set_font("Arial", '', 9)
                     pdf.set_draw_color(220,220,220); pdf.line(10, pdf.get_y(), 200, pdf.get_y())
-                    pdf.ln(7)
+                    pdf.ln(6) # Quebra de linha menor
             return soma, qtd
 
         s_tit, q_tit = print_tabela("ELENCO TITULAR", "TITULAR")
-        pdf.ln(5)
+        pdf.ln(3) # Espaço entre tabelas reduzido
         print_tabela("BANCO DE RESERVAS", "RESERVA")
         
-        pdf.ln(10)
+        # Rodapé
+        pdf.ln(5)
         med = s_tit/q_tit if q_tit > 0 else 0
         pdf.set_fill_color(50,50,50); pdf.set_text_color(255,255,255)
         pdf.set_font("Arial", 'B', 12)
