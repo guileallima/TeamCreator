@@ -16,7 +16,7 @@ SENHA_APP = "nmrytcivcuidhryn"
 EMAIL_DESTINO = "leallimagui@gmail.com"
 ORCAMENTO_MAX = 2000.0
 
-# Dicionário de Cores para o PDF (Nome -> RGB)
+# Dicionário de Cores para o PDF
 MAPA_CORES = {
     "Preto": (0, 0, 0), "Branco": (255, 255, 255), "Cinza": (128, 128, 128),
     "Vermelho": (200, 0, 0), "Azul Escuro": (0, 0, 139), "Azul Claro": (135, 206, 235),
@@ -25,8 +25,7 @@ MAPA_CORES = {
     "Prata": (192, 192, 192), "Vinho": (114, 47, 55)
 }
 
-# Configuração das Camisas (Nome -> Arquivo)
-# IMPORTANTE: Coloque as imagens camisa1.png, camisa2.png, etc na pasta do script!
+# Configuração das Camisas
 OPCOES_CAMISAS = {
     "Modelo 1": "camisa1.png",
     "Modelo 2": "camisa2.png",
@@ -59,6 +58,20 @@ COLUNAS_MASTER_LIGA = [
 ]
 
 st.set_page_config(page_title="Squad Builder PES 2013", layout="wide")
+
+# --- CSS PARA REMOVER BOTÕES +/- (STEPPERS) ---
+st.markdown("""
+<style>
+    /* Esconde os botões de incremento/decremento dos inputs numéricos */
+    [data-testid="stNumberInput"] button {
+        display: none;
+    }
+    /* Ajusta o input para ocupar todo o espaço */
+    [data-testid="stNumberInput"] input {
+        width: 100%;
+    }
+</style>
+""", unsafe_allow_html=True)
 
 def clean_price(val):
     if pd.isna(val) or val == '': return 0.0
@@ -118,7 +131,7 @@ def reset_callback():
 custo_total = sum([p.get('MARKET PRICE', 0.0) for p in st.session_state.escolhas.values() if p])
 saldo = ORCAMENTO_MAX - custo_total
 
-# --- SIDEBAR (Entradas Fixas) ---
+# --- SIDEBAR ---
 with st.sidebar:
     st.header("📋 Cadastro")
     int1 = st.text_input("Integrante 1", key="input_int1")
@@ -130,36 +143,44 @@ with st.sidebar:
     st.markdown("---")
     st.subheader("👕 Uniforme")
     
-    # Visualizador de Camisas
-    st.write("Escolha o modelo:")
+    st.write("Modelo:")
     cols_cam = st.columns(2)
     for i, (nome_mod, arquivo) in enumerate(OPCOES_CAMISAS.items()):
         if os.path.exists(arquivo):
             cols_cam[i % 2].image(arquivo, caption=nome_mod, use_column_width=True)
         else:
-            cols_cam[i % 2].warning(f"img ñ encontrada: {arquivo}")
+            cols_cam[i % 2].warning(f"img off")
 
-    # Seletor do Modelo
-    modelo_camisa = st.radio("Modelo Selecionado", list(OPCOES_CAMISAS.keys()), key="input_shirt_model")
+    modelo_camisa = st.radio("Selecione:", list(OPCOES_CAMISAS.keys()), key="input_shirt_model")
     
-    # Cores
     qtd_cores = st.radio("Qtd. Cores", [2, 3], horizontal=True, key="input_num_colors")
     c1, c2 = st.columns(2)
-    cor1 = c1.selectbox("Cor 1 (Principal)", list(MAPA_CORES.keys()), index=1, key="input_c1")
-    cor2 = c2.selectbox("Cor 2 (Detalhes)", list(MAPA_CORES.keys()), index=0, key="input_c2")
+    cor1 = c1.selectbox("Principal", list(MAPA_CORES.keys()), index=1, key="input_c1")
+    cor2 = c2.selectbox("Detalhes", list(MAPA_CORES.keys()), index=0, key="input_c2")
     cor3 = None
     if qtd_cores == 3:
-        cor3 = st.selectbox("Cor 3 (Extra)", list(MAPA_CORES.keys()), index=2, key="input_c3")
+        cor3 = st.selectbox("Extra", list(MAPA_CORES.keys()), index=2, key="input_c3")
     
     st.markdown("---")
-    st.metric("Gasto", f"€{custo_total:.1f}")
-    st.metric("Saldo", f"€{saldo:.1f}", delta=f"{saldo:.1f}")
+    st.subheader("💰 Finanças")
+    
+    # Barra de Progresso Visual
+    percentual_gasto = min(custo_total / ORCAMENTO_MAX, 1.0)
+    cor_barra = "green"
+    if percentual_gasto > 0.75: cor_barra = "orange" # Alerta
+    if percentual_gasto > 0.95: cor_barra = "red"    # Perigo
+    
+    st.progress(percentual_gasto)
+    col_met1, col_met2 = st.columns(2)
+    col_met1.metric("Gasto", f"€{custo_total:.0f}")
+    col_met2.metric("Saldo", f"€{saldo:.0f}")
     
     st.markdown("---")
-    filtro_p = st.number_input("Preço Máximo (€)", 0.0, 3000.0, 2000.0, 10.0, key="input_filter")
+    # Agora sem os botões +/- graças ao CSS
+    filtro_p = st.number_input("Filtrar Preço Máx (€)", 0.0, 3000.0, 2000.0, 10.0, key="input_filter")
     formacao = st.selectbox("Formação", ["4-5-1", "3-4-3", "4-4-2", "4-3-3", "3-5-2"], key="input_fmt")
 
-# --- FUNÇÕES DE SELEÇÃO ---
+# --- FUNÇÕES ---
 def format_func(row):
     if row is None: return "Selecione..."
     return f"ID: {row.get('INDEX','?')} | {row.get('NAME','?')} - OV: {row.get('OVERALL','?')} - €{row.get('MARKET PRICE',0):.1f}"
@@ -181,12 +202,13 @@ def seletor(label, df, key):
         for i, o in enumerate(ops): 
             if o and o['NAME'] == escolha['NAME']: idx = i; break
             
-    c_s, c_n = st.columns([4, 1])
-    with c_s:
+    c_sel, c_num = st.columns([4, 1])
+    with c_sel:
         new_sel = st.selectbox(label, ops, index=idx, format_func=format_func, key=f"s_{key}_{st.session_state.form_id}")
-    with c_n:
+    with c_num:
         val_n = st.session_state.numeros.get(key, 0)
-        new_n = st.number_input("Nº", 0, 99, val_n, key=f"n_{key}_{st.session_state.form_id}")
+        # Input numérico limpo (sem botões)
+        new_n = st.number_input("Camisa", 0, 99, val_n, key=f"n_{key}_{st.session_state.form_id}")
         st.session_state.numeros[key] = new_n
         
     if new_sel != escolha:
@@ -194,7 +216,7 @@ def seletor(label, df, key):
         st.rerun()
     return new_sel
 
-# --- PÁGINA PRINCIPAL ---
+# --- MAIN ---
 st.title(f"⚽ {nome_time.upper()}")
 config = {"4-5-1": {"Z":2,"L":2,"M":5,"A":1}, "3-4-3": {"Z":3,"L":2,"M":2,"A":3}, "4-4-2": {"Z":2,"L":2,"M":4,"A":2}, "4-3-3": {"Z":2,"L":2,"M":3,"A":3}, "3-5-2": {"Z":3,"L":2,"M":3,"A":2}}[formacao]
 
@@ -206,8 +228,6 @@ with c1:
     gk = seletor("🧤 Goleiro", data_ui['GK'], "gk_tit")
     if gk: lista.append({**gk, "T": "TITULAR", "P": "GK", "K": "gk_tit"})
     
-    # --- CORREÇÃO DO ERRO ---
-    # Agora usamos a variável 'config' corretamente nos loops
     for i in range(config["Z"]):
         p = seletor(f"🛡️ Zagueiro {i+1}", data_ui['DF'], f"zag_{i}")
         if p: lista.append({**p, "T": "TITULAR", "P": "CB", "K": f"zag_{i}"})
@@ -232,7 +252,7 @@ with c2:
 
 if st.button("🔄 Resetar Time", on_click=reset_callback): pass
 
-# --- EXPORTAR ---
+# --- EXPORT ---
 if st.sidebar.button("✅ ENVIAR INSCRIÇÃO"):
     if not int1 or not int2 or not email_user: st.error("Faltam dados!"); st.stop()
     if len(lista) < 16: st.warning("Complete o time!"); st.stop()
@@ -247,21 +267,16 @@ if st.sidebar.button("✅ ENVIAR INSCRIÇÃO"):
         pdf = FPDF()
         pdf.add_page()
         
-        # Header (Fundo Escuro)
         pdf.set_fill_color(20,20,20); pdf.rect(0,0,210,50,'F')
-        
-        # Escudo
         if escudo:
             with tempfile.NamedTemporaryFile(delete=False, suffix=".png") as tf:
                 tf.write(escudo.getvalue()); tname=tf.name
             pdf.image(tname, x=10, y=5, w=25); os.unlink(tname)
             
-        # Camisa Escolhida
         arquivo_camisa = OPCOES_CAMISAS.get(modelo_camisa)
         if arquivo_camisa and os.path.exists(arquivo_camisa):
             pdf.image(arquivo_camisa, x=170, y=5, w=30)
         
-        # Textos do Header
         pdf.set_font("Arial", 'B', 24); pdf.set_text_color(255,255,255)
         pdf.set_y(12); pdf.cell(0, 10, nome_time.upper(), 0, 1, 'C')
         
@@ -270,12 +285,10 @@ if st.sidebar.button("✅ ENVIAR INSCRIÇÃO"):
         pdf.cell(0, 5, f"Treinadores: {int1} & {int2}", 0, 1, 'C')
         pdf.cell(0, 5, f"Formação: {formacao} | E-mail: {email_user}", 0, 1, 'C')
         
-        # Cores no Header
         pdf.set_y(38)
-        pdf.cell(65, 5, "", 0, 0) # Espaço
+        pdf.cell(65, 5, "", 0, 0) 
         pdf.cell(20, 5, "Cores:", 0, 0, 'R')
         
-        # Desenha cores
         cores_escolhidas = [cor1, cor2]
         if qtd_cores == 3: cores_escolhidas.append(cor3)
         
@@ -286,9 +299,7 @@ if st.sidebar.button("✅ ENVIAR INSCRIÇÃO"):
             pdf.rect(x_cor, 38, 5, 5, 'F')
             x_cor += 7
             
-        pdf.ln(20) # Sai do Header
-        
-        # Tabelas
+        pdf.ln(20)
         pdf.set_text_color(0,0,0)
         
         def print_tabela(titulo, tipo_filtro):
@@ -321,24 +332,19 @@ if st.sidebar.button("✅ ENVIAR INSCRIÇÃO"):
         pdf.ln(5)
         print_tabela("BANCO DE RESERVAS", "RESERVA")
         
-        # Rodapé
         pdf.ln(10)
         med = s_tit/q_tit if q_tit > 0 else 0
         pdf.set_fill_color(50,50,50); pdf.set_text_color(255,255,255)
         pdf.set_font("Arial", 'B', 12)
         pdf.cell(0, 10, f"FORÇA DO TIME (Média Titular): {med:.1f}", 0, 1, 'C', fill=True)
         
-        # Envio
         msg = MIMEMultipart()
         msg['From'], msg['To'] = EMAIL_REMETENTE, EMAIL_DESTINO
         msg['Subject'] = f"Inscrição: {nome_time}"
         msg.attach(MIMEText(f"Time: {nome_time}\nCamisa: {modelo_camisa}", 'plain'))
         
-        # Anexos
-        files = [
-            ('Escalacao.pdf', pdf.output(dest='S').encode('latin-1'), 'application/pdf'),
-            (f'Master_{nome_time}.csv', csv_str.encode('utf-8-sig'), 'text/csv')
-        ]
+        files = [('Escalacao.pdf', pdf.output(dest='S').encode('latin-1'), 'application/pdf'),
+                 (f'Master_{nome_time}.csv', csv_str.encode('utf-8-sig'), 'text/csv')]
         if escudo: files.append(('Escudo.png', escudo.getvalue(), 'image/png'))
         
         for fname, fcontent, ftype in files:
