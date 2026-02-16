@@ -62,9 +62,12 @@ st.set_page_config(page_title="Squad Builder PES 2013", layout="wide")
 # --- CSS OTIMIZADO ---
 st.markdown("""
 <style>
+    /* Remove botões +/- dos inputs numéricos */
     [data-testid="stNumberInput"] button {display: none;}
     [data-testid="stNumberInput"] input {width: 100%;}
+    /* Ajuste de metricas para mobile */
     [data-testid="stMetricValue"] {font-size: 1.1rem;}
+    /* Expander com fundo leve para destacar */
     .streamlit-expanderHeader {background-color: #f0f2f6; border-radius: 5px;}
 </style>
 """, unsafe_allow_html=True)
@@ -81,6 +84,7 @@ def clean_price(val):
 @st.cache_data
 def load_data():
     try:
+        # UI
         file_ui = "jogadores.xlsx"
         tabs = ['GK', 'DF', 'MF', 'FW']
         data_ui = {}
@@ -98,6 +102,7 @@ def load_data():
             else: df['MARKET PRICE'] = 0.0
             data_ui[tab] = df
 
+        # RAW
         file_raw = "jogadoresdata.xlsx"
         df_raw = pd.read_excel(file_raw)
         df_raw.columns = df_raw.columns.str.strip().str.upper()
@@ -128,8 +133,9 @@ saldo = ORCAMENTO_MAX - custo_total
 # --- TÍTULO ---
 st.title("⚽ SQUAD BUILDER")
 
-# --- BLOCO DE CADASTRO ---
+# --- BLOCO DE CADASTRO (MOBILE FRIENDLY) ---
 with st.expander("📋 Cadastro & Personalização (Clique para Fechar/Abrir)", expanded=True):
+    # Dados Pessoais
     c_int1, c_int2 = st.columns(2)
     int1 = c_int1.text_input("Jogador 1", key="input_int1")
     int2 = c_int2.text_input("Jogador 2", key="input_int2")
@@ -143,6 +149,7 @@ with st.expander("📋 Cadastro & Personalização (Clique para Fechar/Abrir)", 
     st.markdown("---")
     st.write("**Uniforme**")
     
+    # Camisas
     cols_cam = st.columns(4)
     for i, (nome_mod, arquivo) in enumerate(OPCOES_CAMISAS.items()):
         with cols_cam[i % 4]:
@@ -153,6 +160,7 @@ with st.expander("📋 Cadastro & Personalização (Clique para Fechar/Abrir)", 
                 
     modelo_camisa = st.radio("Escolha o Modelo:", list(OPCOES_CAMISAS.keys()), horizontal=True, key="input_shirt_model")
     
+    # Cores
     c_opt, c_cor1, c_cor2, c_cor3 = st.columns([1, 1, 1, 1])
     qtd_cores = c_opt.radio("Qtd.", [2, 3], key="input_num_colors")
     cor1 = c_cor1.selectbox("Principal", list(MAPA_CORES.keys()), index=1, key="input_c1")
@@ -182,7 +190,7 @@ with c_fin:
 
 st.markdown("---")
 
-# --- SELEÇÃO ---
+# --- SELEÇÃO DE JOGADORES ---
 config = {"4-5-1": {"Z":2,"L":2,"M":5,"A":1}, "3-4-3": {"Z":3,"L":2,"M":2,"A":3}, "4-4-2": {"Z":2,"L":2,"M":4,"A":2}, "4-3-3": {"Z":2,"L":2,"M":3,"A":3}, "3-5-2": {"Z":3,"L":2,"M":3,"A":2}}[formacao]
 
 def format_func(row):
@@ -299,7 +307,7 @@ if st.button("✅ ENVIAR INSCRIÇÃO AGORA", type="primary", use_container_width
         # Uniforme e Cores (Ajustado)
         pdf.cell(0, 5, f"Uniforme: {modelo_camisa}", 0, 1, 'C')
         
-        # Desenha cores logo abaixo do texto
+        # Desenha cores logo abaixo do texto (com borda branca para contraste)
         y_cores = pdf.get_y() + 1 # +1mm de respiro
         cores_escolhidas = [cor1, cor2]
         if qtd_cores == 3: cores_escolhidas.append(cor3)
@@ -307,10 +315,14 @@ if st.button("✅ ENVIAR INSCRIÇÃO AGORA", type="primary", use_container_width
         largura_blocos = len(cores_escolhidas) * 7
         x_start = (210 - largura_blocos) / 2
         
+        # Cor da borda: Branca
+        pdf.set_draw_color(255, 255, 255)
+        
         for c_nome in cores_escolhidas:
             rgb = MAPA_CORES.get(c_nome, (255,255,255))
             pdf.set_fill_color(*rgb)
-            pdf.rect(x_start, y_cores, 5, 5, 'F')
+            # 'FD' = Preenchimento + Borda
+            pdf.rect(x_start, y_cores, 5, 5, 'FD')
             x_start += 7
             
         pdf.set_y(47) # Começa o conteúdo logo após o header
@@ -342,7 +354,9 @@ if st.button("✅ ENVIAR INSCRIÇÃO AGORA", type="primary", use_container_width
                     pdf.set_font("Arial", 'B', 8)
                     pdf.cell(30, 5, str(ov), 0, 1, 'C')
                     pdf.set_font("Arial", '', 8)
-                    pdf.set_draw_color(220,220,220); pdf.line(10, pdf.get_y(), 200, pdf.get_y())
+                    # Reseta cor da borda para cinza suave nas tabelas
+                    pdf.set_draw_color(220,220,220)
+                    pdf.line(10, pdf.get_y(), 200, pdf.get_y())
                     pdf.ln(5) 
             return soma, qtd
 
