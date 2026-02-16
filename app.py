@@ -59,13 +59,16 @@ COLUNAS_MASTER_LIGA = [
 
 st.set_page_config(page_title="Squad Builder PES 2013", layout="wide")
 
-# --- CSS: Remove botões +/- ---
+# --- CSS OTIMIZADO ---
 st.markdown("""
 <style>
+    /* Remove botões +/- dos inputs numéricos */
     [data-testid="stNumberInput"] button {display: none;}
     [data-testid="stNumberInput"] input {width: 100%;}
-    /* Pequeno ajuste para alinhar metricas */
-    [data-testid="stMetricValue"] {font-size: 1.2rem;}
+    /* Ajuste de metricas para mobile */
+    [data-testid="stMetricValue"] {font-size: 1.1rem;}
+    /* Expander com fundo leve para destacar */
+    .streamlit-expanderHeader {background-color: #f0f2f6; border-radius: 5px;}
 </style>
 """, unsafe_allow_html=True)
 
@@ -127,69 +130,74 @@ def reset_callback():
 custo_total = sum([p.get('MARKET PRICE', 0.0) for p in st.session_state.escolhas.values() if p])
 saldo = ORCAMENTO_MAX - custo_total
 
-# --- SIDEBAR (Apenas Cadastros) ---
-with st.sidebar:
-    st.header("📋 Cadastro")
-    int1 = st.text_input("Integrante 1", key="input_int1")
-    int2 = st.text_input("Integrante 2", key="input_int2")
-    email_user = st.text_input("E-mail", key="input_email")
-    nome_time = st.text_input("Nome do Time", "MEU TIME", key="input_team")
+# --- TÍTULO ---
+st.title("⚽ SQUAD BUILDER")
+
+# --- BLOCO DE CADASTRO (MOBILE FRIENDLY) ---
+# Usamos expander aberto por padrão para não ocupar espaço se o usuário quiser fechar depois
+with st.expander("📋 Cadastro & Personalização (Clique para Fechar/Abrir)", expanded=True):
+    # Dados Pessoais
+    c_int1, c_int2 = st.columns(2)
+    int1 = c_int1.text_input("Treinador 1", key="input_int1")
+    int2 = c_int2.text_input("Treinador 2", key="input_int2")
     
-    escudo = st.file_uploader("Escudo (Logo)", type=['png','jpg'], key="input_logo")
+    c_team, c_mail = st.columns(2)
+    nome_time = c_team.text_input("Nome do Time", "MEU TIME", key="input_team")
+    email_user = c_mail.text_input("E-mail", key="input_email")
+    
+    escudo = st.file_uploader("Upload do Escudo", type=['png','jpg'], key="input_logo")
     
     st.markdown("---")
-    st.subheader("👕 Uniforme")
+    st.write("**Uniforme**")
     
-    st.write("Modelo:")
-    cols_cam = st.columns(2)
+    # Camisas
+    cols_cam = st.columns(4) # Menor para caber no celular lado a lado (scroll ou wrap)
     for i, (nome_mod, arquivo) in enumerate(OPCOES_CAMISAS.items()):
-        if os.path.exists(arquivo):
-            cols_cam[i % 2].image(arquivo, caption=nome_mod, use_column_width=True)
-        else:
-            cols_cam[i % 2].warning("img off")
-
-    modelo_camisa = st.radio("Selecione:", list(OPCOES_CAMISAS.keys()), key="input_shirt_model")
+        with cols_cam[i % 4]:
+            if os.path.exists(arquivo):
+                st.image(arquivo, use_column_width=True)
+            else:
+                st.write(f"🚫 {nome_mod}")
+                
+    modelo_camisa = st.radio("Escolha o Modelo:", list(OPCOES_CAMISAS.keys()), horizontal=True, key="input_shirt_model")
     
-    qtd_cores = st.radio("Qtd. Cores", [2, 3], horizontal=True, key="input_num_colors")
-    c1, c2 = st.columns(2)
-    cor1 = c1.selectbox("Principal", list(MAPA_CORES.keys()), index=1, key="input_c1")
-    cor2 = c2.selectbox("Detalhes", list(MAPA_CORES.keys()), index=0, key="input_c2")
+    # Cores
+    c_opt, c_cor1, c_cor2, c_cor3 = st.columns([1, 1, 1, 1])
+    qtd_cores = c_opt.radio("Qtd.", [2, 3], key="input_num_colors")
+    cor1 = c_cor1.selectbox("Principal", list(MAPA_CORES.keys()), index=1, key="input_c1")
+    cor2 = c_cor2.selectbox("Detalhe", list(MAPA_CORES.keys()), index=0, key="input_c2")
     cor3 = None
     if qtd_cores == 3:
-        cor3 = st.selectbox("Extra", list(MAPA_CORES.keys()), index=2, key="input_c3")
-
-# --- MAIN PAGE (Painel de Controle) ---
-st.title(f"⚽ {nome_time.upper()}")
+        cor3 = c_cor3.selectbox("Extra", list(MAPA_CORES.keys()), index=2, key="input_c3")
 
 st.markdown("---")
 
-# Layout de Controle: Formação | Filtro | Finanças
-c_fmt, c_filt, c_fin = st.columns([1, 0.8, 1.2])
+# --- PAINEL DE CONTROLE (FLUXO PRINCIPAL) ---
+# Tudo aqui se ajusta para 1 coluna no celular automaticamente
+c_fmt, c_filt, c_fin = st.columns([1, 1, 1.5])
 
 with c_fmt:
     formacao = st.selectbox("Esquema Tático", ["4-5-1", "3-4-3", "4-4-2", "4-3-3", "3-5-2"], key="input_fmt")
 
 with c_filt:
-    filtro_p = st.number_input("Preço Máx (€)", 0.0, 3000.0, 2000.0, 10.0, key="input_filter")
+    # AQUI: Nome alterado para "Valor Limite"
+    filtro_p = st.number_input("Valor Limite por Jogador (€)", 0.0, 3000.0, 2000.0, 10.0, key="input_filter")
 
 with c_fin:
-    # Métricas Financeiras Compactas
     percentual_gasto = min(custo_total / ORCAMENTO_MAX, 1.0)
-    
-    # Colunas internas para métricas
-    m1, m2 = st.columns(2)
-    m1.metric("Gasto", f"€{custo_total:.0f}")
-    m2.metric("Saldo", f"€{saldo:.0f}")
-    
-    # Barra colorida
+    # Cores da barra
     color = "green"
     if percentual_gasto > 0.75: color = "orange"
     if percentual_gasto > 0.95: color = "red"
+    
+    m1, m2 = st.columns(2)
+    m1.metric("Gasto Total", f"€{custo_total:.0f}")
+    m2.metric("Saldo", f"€{saldo:.0f}")
     st.progress(percentual_gasto)
 
 st.markdown("---")
 
-# --- LÓGICA DE SELEÇÃO E MONTAGEM DO TIME ---
+# --- SELEÇÃO DE JOGADORES ---
 config = {"4-5-1": {"Z":2,"L":2,"M":5,"A":1}, "3-4-3": {"Z":3,"L":2,"M":2,"A":3}, "4-4-2": {"Z":2,"L":2,"M":4,"A":2}, "4-3-3": {"Z":2,"L":2,"M":3,"A":3}, "3-5-2": {"Z":3,"L":2,"M":3,"A":2}}[formacao]
 
 def format_func(row):
@@ -213,12 +221,13 @@ def seletor(label, df, key):
         for i, o in enumerate(ops): 
             if o and o['NAME'] == escolha['NAME']: idx = i; break
             
-    c_sel, c_num = st.columns([4, 1])
+    c_sel, c_num = st.columns([4, 1.2]) # Ajuste de proporção para mobile
     with c_sel:
         new_sel = st.selectbox(label, ops, index=idx, format_func=format_func, key=f"s_{key}_{st.session_state.form_id}")
     with c_num:
-        val_n = st.session_state.numeros.get(key, 0)
-        new_n = st.number_input("Camisa", 0, 99, val_n, key=f"n_{key}_{st.session_state.form_id}")
+        val_n = st.session_state.numeros.get(key, "")
+        # AQUI: Muda para Text Input vazio por padrão
+        new_n = st.text_input("Nº", value=val_n, max_chars=2, key=f"n_{key}_{st.session_state.form_id}")
         st.session_state.numeros[key] = new_n
         
     if new_sel != escolha:
@@ -226,7 +235,7 @@ def seletor(label, df, key):
         st.rerun()
     return new_sel
 
-c1, c2 = st.columns([2, 1])
+c1, c2 = st.columns([1, 1]) # Em mobile, isso vira stack (um em cima do outro)
 lista = []
 
 with c1:
@@ -256,12 +265,24 @@ with c2:
         p = seletor(f"Reserva {i+2}", df_all, f"res_{i}")
         if p: lista.append({**p, "T": "RESERVA", "P": "RES", "K": f"res_{i}"})
 
-if st.button("🔄 Resetar Time", on_click=reset_callback): pass
+st.markdown("---")
+
+# --- BOTÕES FINAIS ---
+# Reset
+if st.button("🔄 Limpar Escalação"):
+    reset_callback()
+    st.rerun()
+
+st.markdown("###") # Espaço
 
 # --- EXPORT ---
-if st.sidebar.button("✅ ENVIAR INSCRIÇÃO"):
-    if not int1 or not int2 or not email_user: st.error("Faltam dados!"); st.stop()
-    if len(lista) < 16: st.warning("Complete o time!"); st.stop()
+if st.button("✅ ENVIAR INSCRIÇÃO AGORA", type="primary", use_container_width=True):
+    if not int1 or not int2 or not email_user: 
+        st.error("⚠️ Faltam dados no cadastro (Nome, Email ou Integrantes)!")
+        st.stop()
+    if len(lista) < 16: 
+        st.warning(f"⚠️ Complete o time! Faltam {16 - len(lista)} jogadores.")
+        st.stop()
     
     try:
         # CSV
@@ -319,7 +340,12 @@ if st.sidebar.button("✅ ENVIAR INSCRIÇÃO"):
             for p in lista:
                 if p['T'] == tipo_filtro:
                     n = str(p.get('NAME','')).encode('latin-1','ignore').decode('latin-1')
-                    num = st.session_state.numeros.get(p['K'], 0)
+                    
+                    # Trata o número vindo do text_input
+                    raw_num = st.session_state.numeros.get(p['K'], "")
+                    # Se vazio ou não digito, vira 0 ou vazio no PDF (vou por 0 para padrão)
+                    num = int(raw_num) if raw_num.isdigit() else ""
+                    
                     ov = p.get('OVERALL', 0)
                     try: soma += float(ov); qtd += 1
                     except: pass
