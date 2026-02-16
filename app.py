@@ -16,7 +16,7 @@ SENHA_APP = "nmrytcivcuidhryn"
 EMAIL_DESTINO = "leallimagui@gmail.com"
 ORCAMENTO_MAX = 2000.0
 
-# Dicionário de Cores para o PDF
+# Dicionário de Cores
 MAPA_CORES = {
     "Preto": (0, 0, 0), "Branco": (255, 255, 255), "Cinza": (128, 128, 128),
     "Vermelho": (200, 0, 0), "Azul Escuro": (0, 0, 139), "Azul Claro": (135, 206, 235),
@@ -59,17 +59,11 @@ COLUNAS_MASTER_LIGA = [
 
 st.set_page_config(page_title="Squad Builder PES 2013", layout="wide")
 
-# --- CSS PARA REMOVER BOTÕES +/- (STEPPERS) ---
+# --- CSS: Remove botões +/- ---
 st.markdown("""
 <style>
-    /* Esconde os botões de incremento/decremento dos inputs numéricos */
-    [data-testid="stNumberInput"] button {
-        display: none;
-    }
-    /* Ajusta o input para ocupar todo o espaço */
-    [data-testid="stNumberInput"] input {
-        width: 100%;
-    }
+    [data-testid="stNumberInput"] button {display: none;}
+    [data-testid="stNumberInput"] input {width: 100%;}
 </style>
 """, unsafe_allow_html=True)
 
@@ -85,7 +79,7 @@ def clean_price(val):
 @st.cache_data
 def load_data():
     try:
-        # 1. UI (jogadores.xlsx)
+        # UI
         file_ui = "jogadores.xlsx"
         tabs = ['GK', 'DF', 'MF', 'FW']
         data_ui = {}
@@ -103,7 +97,7 @@ def load_data():
             else: df['MARKET PRICE'] = 0.0
             data_ui[tab] = df
 
-        # 2. RAW (jogadoresdata.xlsx)
+        # RAW
         file_raw = "jogadoresdata.xlsx"
         df_raw = pd.read_excel(file_raw)
         df_raw.columns = df_raw.columns.str.strip().str.upper()
@@ -137,7 +131,14 @@ with st.sidebar:
     int1 = st.text_input("Integrante 1", key="input_int1")
     int2 = st.text_input("Integrante 2", key="input_int2")
     email_user = st.text_input("E-mail", key="input_email")
-    nome_time = st.text_input("Nome do Time", "MEU TIME", key="input_team")
+    
+    # --- MUDANÇA AQUI: Nome e Formação lado a lado ---
+    c_time, c_fmt = st.columns([0.65, 0.35])
+    with c_time:
+        nome_time = st.text_input("Nome do Time", "MEU TIME", key="input_team")
+    with c_fmt:
+        formacao = st.selectbox("Formação", ["4-5-1", "3-4-3", "4-4-2", "4-3-3", "3-5-2"], key="input_fmt")
+        
     escudo = st.file_uploader("Escudo (Logo)", type=['png','jpg'], key="input_logo")
     
     st.markdown("---")
@@ -149,7 +150,7 @@ with st.sidebar:
         if os.path.exists(arquivo):
             cols_cam[i % 2].image(arquivo, caption=nome_mod, use_column_width=True)
         else:
-            cols_cam[i % 2].warning(f"img off")
+            cols_cam[i % 2].warning("img off")
 
     modelo_camisa = st.radio("Selecione:", list(OPCOES_CAMISAS.keys()), key="input_shirt_model")
     
@@ -164,21 +165,14 @@ with st.sidebar:
     st.markdown("---")
     st.subheader("💰 Finanças")
     
-    # Barra de Progresso Visual
     percentual_gasto = min(custo_total / ORCAMENTO_MAX, 1.0)
-    cor_barra = "green"
-    if percentual_gasto > 0.75: cor_barra = "orange" # Alerta
-    if percentual_gasto > 0.95: cor_barra = "red"    # Perigo
-    
     st.progress(percentual_gasto)
     col_met1, col_met2 = st.columns(2)
     col_met1.metric("Gasto", f"€{custo_total:.0f}")
     col_met2.metric("Saldo", f"€{saldo:.0f}")
     
     st.markdown("---")
-    # Agora sem os botões +/- graças ao CSS
     filtro_p = st.number_input("Filtrar Preço Máx (€)", 0.0, 3000.0, 2000.0, 10.0, key="input_filter")
-    formacao = st.selectbox("Formação", ["4-5-1", "3-4-3", "4-4-2", "4-3-3", "3-5-2"], key="input_fmt")
 
 # --- FUNÇÕES ---
 def format_func(row):
@@ -207,7 +201,6 @@ def seletor(label, df, key):
         new_sel = st.selectbox(label, ops, index=idx, format_func=format_func, key=f"s_{key}_{st.session_state.form_id}")
     with c_num:
         val_n = st.session_state.numeros.get(key, 0)
-        # Input numérico limpo (sem botões)
         new_n = st.number_input("Camisa", 0, 99, val_n, key=f"n_{key}_{st.session_state.form_id}")
         st.session_state.numeros[key] = new_n
         
