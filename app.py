@@ -133,7 +133,6 @@ with st.sidebar:
     # Visualizador de Camisas
     st.write("Escolha o modelo:")
     cols_cam = st.columns(2)
-    # Exibe as imagens se existirem
     for i, (nome_mod, arquivo) in enumerate(OPCOES_CAMISAS.items()):
         if os.path.exists(arquivo):
             cols_cam[i % 2].image(arquivo, caption=nome_mod, use_column_width=True)
@@ -197,7 +196,7 @@ def seletor(label, df, key):
 
 # --- PÁGINA PRINCIPAL ---
 st.title(f"⚽ {nome_time.upper()}")
-cfg = {"4-5-1": {"Z":2,"L":2,"M":5,"A":1}, "3-4-3": {"Z":3,"L":2,"M":2,"A":3}, "4-4-2": {"Z":2,"L":2,"M":4,"A":2}, "4-3-3": {"Z":2,"L":2,"M":3,"A":3}, "3-5-2": {"Z":3,"L":2,"M":3,"A":2}}[formacao]
+config = {"4-5-1": {"Z":2,"L":2,"M":5,"A":1}, "3-4-3": {"Z":3,"L":2,"M":2,"A":3}, "4-4-2": {"Z":2,"L":2,"M":4,"A":2}, "4-3-3": {"Z":2,"L":2,"M":3,"A":3}, "3-5-2": {"Z":3,"L":2,"M":3,"A":2}}[formacao]
 
 c1, c2 = st.columns([2, 1])
 lista = []
@@ -206,10 +205,13 @@ with c1:
     st.subheader("Titulares")
     gk = seletor("🧤 Goleiro", data_ui['GK'], "gk_tit")
     if gk: lista.append({**gk, "T": "TITULAR", "P": "GK", "K": "gk_tit"})
-    for i in range(cfg["Z"]):
+    
+    # --- CORREÇÃO DO ERRO ---
+    # Agora usamos a variável 'config' corretamente nos loops
+    for i in range(config["Z"]):
         p = seletor(f"🛡️ Zagueiro {i+1}", data_ui['DF'], f"zag_{i}")
         if p: lista.append({**p, "T": "TITULAR", "P": "CB", "K": f"zag_{i}"})
-    for i in range(cfg["L"]):
+    for i in range(config["L"]):
         p = seletor(f"🏃 Lateral {i+1}", pd.concat([data_ui['DF'],data_ui['MF']]), f"lat_{i}")
         if p: lista.append({**p, "T": "TITULAR", "P": "LB/RB", "K": f"lat_{i}"})
     for i in range(config["M"]):
@@ -246,15 +248,15 @@ if st.sidebar.button("✅ ENVIAR INSCRIÇÃO"):
         pdf.add_page()
         
         # Header (Fundo Escuro)
-        pdf.set_fill_color(20,20,20); pdf.rect(0,0,210,50,'F') # Aumentei altura do header
+        pdf.set_fill_color(20,20,20); pdf.rect(0,0,210,50,'F')
         
         # Escudo
         if escudo:
             with tempfile.NamedTemporaryFile(delete=False, suffix=".png") as tf:
                 tf.write(escudo.getvalue()); tname=tf.name
-            pdf.image(tname, x=10, y=5, w=30); os.unlink(tname)
+            pdf.image(tname, x=10, y=5, w=25); os.unlink(tname)
             
-        # Camisa Escolhida (Direita do Header)
+        # Camisa Escolhida
         arquivo_camisa = OPCOES_CAMISAS.get(modelo_camisa)
         if arquivo_camisa and os.path.exists(arquivo_camisa):
             pdf.image(arquivo_camisa, x=170, y=5, w=30)
@@ -273,7 +275,7 @@ if st.sidebar.button("✅ ENVIAR INSCRIÇÃO"):
         pdf.cell(65, 5, "", 0, 0) # Espaço
         pdf.cell(20, 5, "Cores:", 0, 0, 'R')
         
-        # Desenha bolinhas/quadrados das cores
+        # Desenha cores
         cores_escolhidas = [cor1, cor2]
         if qtd_cores == 3: cores_escolhidas.append(cor3)
         
