@@ -10,13 +10,31 @@ import tempfile
 import os
 import re
 
-# --- CONFIGURAÇÕES ---
+# --- CONFIGURAÇÕES GERAIS ---
 EMAIL_REMETENTE = "leallimagui@gmail.com" 
 SENHA_APP = "nmrytcivcuidhryn" 
 EMAIL_DESTINO = "leallimagui@gmail.com"
 ORCAMENTO_MAX = 2000.0
 
-# Colunas Obrigatórias do PES 2013 (Master Liga)
+# Dicionário de Cores para o PDF (Nome -> RGB)
+MAPA_CORES = {
+    "Preto": (0, 0, 0), "Branco": (255, 255, 255), "Cinza": (128, 128, 128),
+    "Vermelho": (200, 0, 0), "Azul Escuro": (0, 0, 139), "Azul Claro": (135, 206, 235),
+    "Verde": (0, 128, 0), "Amarelo": (255, 215, 0), "Laranja": (255, 165, 0),
+    "Roxo": (128, 0, 128), "Rosa": (255, 192, 203), "Dourado": (218, 165, 32),
+    "Prata": (192, 192, 192), "Vinho": (114, 47, 55)
+}
+
+# Configuração das Camisas (Nome -> Arquivo)
+# IMPORTANTE: Coloque as imagens camisa1.png, camisa2.png, etc na pasta do script!
+OPCOES_CAMISAS = {
+    "Modelo 1": "camisa1.png",
+    "Modelo 2": "camisa2.png",
+    "Modelo 3": "camisa3.png",
+    "Modelo 4": "camisa4.png"
+}
+
+# Colunas Master Liga
 COLUNAS_MASTER_LIGA = [
     'INDEX', 'NAME', 'SHIRTNAME', 'JAPANESE PLAYER NAME', 'SPACING', 'COMMENTARY', 'AGE', 'NATIONALITY', 
     'FOOT', 'WEIGHT', 'HEIGHT', 'FORM', 'WEAK FOOT ACCURACY', 'WEAK FOOT FREQUENCY', 'INJURY TOLERANCE', 
@@ -54,31 +72,25 @@ def clean_price(val):
 @st.cache_data
 def load_data():
     try:
-        # 1. VISUAL (Site)
+        # 1. UI (jogadores.xlsx)
         file_ui = "jogadores.xlsx"
         tabs = ['GK', 'DF', 'MF', 'FW']
         data_ui = {}
         for tab in tabs:
             df = pd.read_excel(file_ui, sheet_name=tab)
             df.columns = df.columns.str.strip().str.upper()
-            
             col_id = df.columns[0]
             df.rename(columns={col_id: 'INDEX'}, inplace=True)
             df['INDEX'] = df['INDEX'].astype(str).str.strip()
             
             col_price = None
             for c in ['MARKET PRICE', 'MARKET VALUE (M€)', 'MARKET VALUE', 'VALUE', 'PRICE']:
-                if c in df.columns:
-                    col_price = c
-                    break
-            if col_price:
-                df['MARKET PRICE'] = df[col_price].apply(clean_price)
-            else:
-                df['MARKET PRICE'] = 0.0
-            
+                if c in df.columns: col_price = c; break
+            if col_price: df['MARKET PRICE'] = df[col_price].apply(clean_price)
+            else: df['MARKET PRICE'] = 0.0
             data_ui[tab] = df
 
-        # 2. DADOS (Jogo)
+        # 2. RAW (jogadoresdata.xlsx)
         file_raw = "jogadoresdata.xlsx"
         df_raw = pd.read_excel(file_raw)
         df_raw.columns = df_raw.columns.str.strip().str.upper()
@@ -87,10 +99,8 @@ def load_data():
         df_raw['INDEX'] = df_raw['INDEX'].astype(str).str.strip()
             
         return data_ui, df_raw
-
     except Exception as e:
-        st.error(f"Erro ao carregar arquivos: {e}")
-        st.stop()
+        st.error(f"Erro ao carregar arquivos: {e}"); st.stop()
 
 data_ui, data_raw = load_data()
 
@@ -101,248 +111,244 @@ if 'form_id' not in st.session_state: st.session_state.form_id = 0
 
 def reset_callback():
     st.session_state.escolhas = {}
-    st.session_state.numeros = {} # Reseta números também
+    st.session_state.numeros = {}
     st.session_state.form_id += 1
 
-# --- CÁLCULO ---
-custo_total = 0.0
-for k, player in st.session_state.escolhas.items():
-    if player: custo_total += player.get('MARKET PRICE', 0.0)
+# --- CÁLCULOS ---
+custo_total = sum([p.get('MARKET PRICE', 0.0) for p in st.session_state.escolhas.values() if p])
 saldo = ORCAMENTO_MAX - custo_total
 
-# --- UI ---
+# --- SIDEBAR (Entradas Fixas) ---
 with st.sidebar:
     st.header("📋 Cadastro")
     int1 = st.text_input("Integrante 1", key="input_int1")
     int2 = st.text_input("Integrante 2", key="input_int2")
     email_user = st.text_input("E-mail", key="input_email")
     nome_time = st.text_input("Nome do Time", "MEU TIME", key="input_team")
-    escudo = st.file_uploader("Escudo", type=['png','jpg'], key="input_logo")
+    escudo = st.file_uploader("Escudo (Logo)", type=['png','jpg'], key="input_logo")
+    
+    st.markdown("---")
+    st.subheader("👕 Uniforme")
+    
+    # Visualizador de Camisas
+    st.write("Escolha o modelo:")
+    cols_cam = st.columns(2)
+    # Exibe as imagens se existirem
+    for i, (nome_mod, arquivo) in enumerate(OPCOES_CAMISAS.items()):
+        if os.path.exists(arquivo):
+            cols_cam[i % 2].image(arquivo, caption=nome_mod, use_column_width=True)
+        else:
+            cols_cam[i % 2].warning(f"img ñ encontrada: {arquivo}")
+
+    # Seletor do Modelo
+    modelo_camisa = st.radio("Modelo Selecionado", list(OPCOES_CAMISAS.keys()), key="input_shirt_model")
+    
+    # Cores
+    qtd_cores = st.radio("Qtd. Cores", [2, 3], horizontal=True, key="input_num_colors")
+    c1, c2 = st.columns(2)
+    cor1 = c1.selectbox("Cor 1 (Principal)", list(MAPA_CORES.keys()), index=1, key="input_c1")
+    cor2 = c2.selectbox("Cor 2 (Detalhes)", list(MAPA_CORES.keys()), index=0, key="input_c2")
+    cor3 = None
+    if qtd_cores == 3:
+        cor3 = st.selectbox("Cor 3 (Extra)", list(MAPA_CORES.keys()), index=2, key="input_c3")
     
     st.markdown("---")
     st.metric("Gasto", f"€{custo_total:.1f}")
     st.metric("Saldo", f"€{saldo:.1f}", delta=f"{saldo:.1f}")
     
     st.markdown("---")
-    filtro_p = st.number_input("Preço Máximo (€)", min_value=0.0, max_value=3000.0, value=2000.0, step=10.0, key="input_filter")
-    
-    formacao = st.selectbox("Formação", ["4-5-1", "3-4-3", "4-4-2", "4-3-3", "3-5-2"], key="input_formation")
+    filtro_p = st.number_input("Preço Máximo (€)", 0.0, 3000.0, 2000.0, 10.0, key="input_filter")
+    formacao = st.selectbox("Formação", ["4-5-1", "3-4-3", "4-4-2", "4-3-3", "3-5-2"], key="input_fmt")
 
-# --- SELETOR ---
+# --- FUNÇÕES DE SELEÇÃO ---
 def format_func(row):
     if row is None: return "Selecione..."
-    idx = row.get('INDEX', '---')
-    name = row.get('NAME', 'Desconhecido')
-    ov = row.get('OVERALL', row.get('Overall', '??'))
-    price = row.get('MARKET PRICE', 0.0)
-    return f"ID: {idx} | {name} - OV: {ov} - €{price:.1f}"
+    return f"ID: {row.get('INDEX','?')} | {row.get('NAME','?')} - OV: {row.get('OVERALL','?')} - €{row.get('MARKET PRICE',0):.1f}"
 
 def seletor(label, df, key):
-    escolha_atual = st.session_state.escolhas.get(key)
-    valor_atual = escolha_atual.get('MARKET PRICE', 0.0) if escolha_atual else 0.0
-    usados = [v['NAME'] for k,v in st.session_state.escolhas.items() if v is not None and k != key]
+    escolha = st.session_state.escolhas.get(key)
+    val_atual = escolha.get('MARKET PRICE', 0.0) if escolha else 0.0
+    usados = [v['NAME'] for k,v in st.session_state.escolhas.items() if v and k != key]
     
-    mask = (df['MARKET PRICE'] <= (saldo + valor_atual)) & (df['MARKET PRICE'] <= filtro_p) & (~df['NAME'].isin(usados))
-    df_filtrado = df[mask]
-    
+    mask = (df['MARKET PRICE'] <= (saldo + val_atual)) & (df['MARKET PRICE'] <= filtro_p) & (~df['NAME'].isin(usados))
+    df_f = df[mask]
     col_ov = 'OVERALL' if 'OVERALL' in df.columns else df.columns[2]
-    opcoes = [None] + df_filtrado.sort_values(col_ov, ascending=False).to_dict('records')
+    ops = [None] + df_f.sort_values(col_ov, ascending=False).to_dict('records')
     
-    if escolha_atual and escolha_atual['NAME'] not in [o['NAME'] for o in opcoes if o]:
-        opcoes.insert(1, escolha_atual)
+    if escolha and escolha['NAME'] not in [o['NAME'] for o in ops if o]: ops.insert(1, escolha)
     
-    idx_sel = 0
-    if escolha_atual:
-        for i, opt in enumerate(opcoes):
-            if opt and opt['NAME'] == escolha_atual['NAME']: idx_sel = i; break
+    idx = 0
+    if escolha:
+        for i, o in enumerate(ops): 
+            if o and o['NAME'] == escolha['NAME']: idx = i; break
             
-    # Layout em Colunas: Seleção (80%) + Número (20%)
-    c_sel, c_num = st.columns([4, 1])
-    
-    with c_sel:
-        nova_escolha = st.selectbox(label, opcoes, index=idx_sel, format_func=format_func, key=f"sel_{key}_{st.session_state.form_id}")
-    
-    with c_num:
-        # Pega o número salvo ou padrão 0
-        val_num = st.session_state.numeros.get(key, 0)
-        novo_num = st.number_input("Nº", min_value=0, max_value=99, step=1, value=val_num, key=f"num_{key}_{st.session_state.form_id}")
-        st.session_state.numeros[key] = novo_num # Salva no estado
-    
-    if nova_escolha != escolha_atual:
-        st.session_state.escolhas[key] = nova_escolha
+    c_s, c_n = st.columns([4, 1])
+    with c_s:
+        new_sel = st.selectbox(label, ops, index=idx, format_func=format_func, key=f"s_{key}_{st.session_state.form_id}")
+    with c_n:
+        val_n = st.session_state.numeros.get(key, 0)
+        new_n = st.number_input("Nº", 0, 99, val_n, key=f"n_{key}_{st.session_state.form_id}")
+        st.session_state.numeros[key] = new_n
+        
+    if new_sel != escolha:
+        st.session_state.escolhas[key] = new_sel
         st.rerun()
-    return nova_escolha
+    return new_sel
 
-# --- MONTAGEM ---
+# --- PÁGINA PRINCIPAL ---
 st.title(f"⚽ {nome_time.upper()}")
-config = {"4-5-1": {"Z":2,"L":2,"M":5,"A":1}, "3-4-3": {"Z":3,"L":2,"M":2,"A":3}, "4-4-2": {"Z":2,"L":2,"M":4,"A":2}, "4-3-3": {"Z":2,"L":2,"M":3,"A":3}, "3-5-2": {"Z":3,"L":2,"M":3,"A":2}}[formacao]
+cfg = {"4-5-1": {"Z":2,"L":2,"M":5,"A":1}, "3-4-3": {"Z":3,"L":2,"M":2,"A":3}, "4-4-2": {"Z":2,"L":2,"M":4,"A":2}, "4-3-3": {"Z":2,"L":2,"M":3,"A":3}, "3-5-2": {"Z":3,"L":2,"M":3,"A":2}}[formacao]
 
 c1, c2 = st.columns([2, 1])
-lista_visual = [] 
+lista = []
 
 with c1:
     st.subheader("Titulares")
     gk = seletor("🧤 Goleiro", data_ui['GK'], "gk_tit")
-    if gk: lista_visual.append({**gk, "TIPO": "TITULAR", "POS_DISPLAY": "GK", "KEY_NUM": "gk_tit"})
-    
-    for i in range(config["Z"]):
-        z = seletor(f"🛡️ Zagueiro {i+1}", data_ui['DF'], f"zag_{i}")
-        if z: lista_visual.append({**z, "TIPO": "TITULAR", "POS_DISPLAY": "CB", "KEY_NUM": f"zag_{i}"})
-        
-    for i in range(config["L"]):
-        l = seletor(f"🏃 Lateral {i+1}", pd.concat([data_ui['DF'], data_ui['MF']]), f"lat_{i}")
-        if l: lista_visual.append({**l, "TIPO": "TITULAR", "POS_DISPLAY": "LB/RB", "KEY_NUM": f"lat_{i}"})
-        
+    if gk: lista.append({**gk, "T": "TITULAR", "P": "GK", "K": "gk_tit"})
+    for i in range(cfg["Z"]):
+        p = seletor(f"🛡️ Zagueiro {i+1}", data_ui['DF'], f"zag_{i}")
+        if p: lista.append({**p, "T": "TITULAR", "P": "CB", "K": f"zag_{i}"})
+    for i in range(cfg["L"]):
+        p = seletor(f"🏃 Lateral {i+1}", pd.concat([data_ui['DF'],data_ui['MF']]), f"lat_{i}")
+        if p: lista.append({**p, "T": "TITULAR", "P": "LB/RB", "K": f"lat_{i}"})
     for i in range(config["M"]):
-        m = seletor(f"🎯 Meio Campo {i+1}", data_ui['MF'], f"mei_{i}")
-        if m: lista_visual.append({**m, "TIPO": "TITULAR", "POS_DISPLAY": "MF", "KEY_NUM": f"mei_{i}"})
-        
+        p = seletor(f"🎯 Meio Campo {i+1}", data_ui['MF'], f"mei_{i}")
+        if p: lista.append({**p, "T": "TITULAR", "P": "MF", "K": f"mei_{i}"})
     for i in range(config["A"]):
-        a = seletor(f"🚀 Atacante {i+1}", data_ui['FW'], f"ata_{i}")
-        if a: lista_visual.append({**a, "TIPO": "TITULAR", "POS_DISPLAY": "CF/SS", "KEY_NUM": f"ata_{i}"})
+        p = seletor(f"🚀 Atacante {i+1}", data_ui['FW'], f"ata_{i}")
+        if p: lista.append({**p, "T": "TITULAR", "P": "CF/SS", "K": f"ata_{i}"})
 
 with c2:
     st.subheader("Reservas (5)")
-    gkr = seletor("🧤 Goleiro Reserva", data_ui['GK'], "gk_res")
-    if gkr: lista_visual.append({**gkr, "TIPO": "RESERVA", "POS_DISPLAY": "GK", "KEY_NUM": "gk_res"})
-    
+    gkr = seletor("🧤 Goleiro Res.", data_ui['GK'], "gk_res")
+    if gkr: lista.append({**gkr, "T": "RESERVA", "P": "GK", "K": "gk_res"})
     df_all = pd.concat([data_ui['DF'], data_ui['MF'], data_ui['FW']])
     for i in range(4):
-        r = seletor(f"Reserva {i+2}", df_all, f"res_{i}")
-        if r: lista_visual.append({**r, "TIPO": "RESERVA", "POS_DISPLAY": "RES", "KEY_NUM": f"res_{i}"})
+        p = seletor(f"Reserva {i+2}", df_all, f"res_{i}")
+        if p: lista.append({**p, "T": "RESERVA", "P": "RES", "K": f"res_{i}"})
 
-if st.button("🔄 Resetar Apenas o Time", on_click=reset_callback): pass
+if st.button("🔄 Resetar Time", on_click=reset_callback): pass
 
-# --- EXPORTAÇÃO ---
+# --- EXPORTAR ---
 if st.sidebar.button("✅ ENVIAR INSCRIÇÃO"):
-    if not int1 or not int2 or not email_user: st.sidebar.error("Dados incompletos."); st.stop()
-    if len(lista_visual) < 16: st.sidebar.warning("Selecione os 16 jogadores."); st.stop()
+    if not int1 or not int2 or not email_user: st.error("Faltam dados!"); st.stop()
+    if len(lista) < 16: st.warning("Complete o time!"); st.stop()
     
     try:
-        # 1. Recupera IDs
-        ids_selecionados = [str(p['INDEX']).strip() for p in lista_visual]
+        # CSV
+        ids = [str(p['INDEX']).strip() for p in lista]
+        df_exp = data_raw[data_raw['INDEX'].isin(ids)].reindex(columns=COLUNAS_MASTER_LIGA)
+        csv_str = df_exp.to_csv(sep=';', index=False, encoding='utf-8-sig')
         
-        # 2. Gera CSV (Match com arquivo Raw)
-        df_export_raw = data_raw[data_raw['INDEX'].isin(ids_selecionados)].copy()
-        df_export_final = df_export_raw.reindex(columns=COLUNAS_MASTER_LIGA)
-        csv_str = df_export_final.to_csv(sep=';', index=False, encoding='utf-8-sig')
-        
-        # 3. Gera PDF VISUAL LIMPO
+        # PDF
         pdf = FPDF()
         pdf.add_page()
         
-        # Cabeçalho
-        pdf.set_fill_color(20,20,20); pdf.rect(0,0,210,40,'F')
+        # Header (Fundo Escuro)
+        pdf.set_fill_color(20,20,20); pdf.rect(0,0,210,50,'F') # Aumentei altura do header
         
+        # Escudo
         if escudo:
             with tempfile.NamedTemporaryFile(delete=False, suffix=".png") as tf:
                 tf.write(escudo.getvalue()); tname=tf.name
-            pdf.image(tname, x=10, y=5, w=25); os.unlink(tname)
+            pdf.image(tname, x=10, y=5, w=30); os.unlink(tname)
+            
+        # Camisa Escolhida (Direita do Header)
+        arquivo_camisa = OPCOES_CAMISAS.get(modelo_camisa)
+        if arquivo_camisa and os.path.exists(arquivo_camisa):
+            pdf.image(arquivo_camisa, x=170, y=5, w=30)
         
+        # Textos do Header
         pdf.set_font("Arial", 'B', 24); pdf.set_text_color(255,255,255)
-        pdf.set_y(15); pdf.cell(0, 10, nome_time.upper(), 0, 1, 'C')
+        pdf.set_y(12); pdf.cell(0, 10, nome_time.upper(), 0, 1, 'C')
         
-        pdf.set_text_color(0,0,0); pdf.ln(20)
-        pdf.set_font("Arial", '', 12)
-        pdf.cell(0, 6, f"Treinadores: {int1} & {int2}", 0, 1, 'C')
-        pdf.cell(0, 6, f"Formação: {formacao}", 0, 1, 'C')
-        pdf.ln(5)
+        pdf.set_font("Arial", '', 10)
+        pdf.set_y(25)
+        pdf.cell(0, 5, f"Treinadores: {int1} & {int2}", 0, 1, 'C')
+        pdf.cell(0, 5, f"Formação: {formacao} | E-mail: {email_user}", 0, 1, 'C')
         
-        # --- TABELA DE TITULARES ---
-        pdf.set_fill_color(220, 220, 220)
-        pdf.set_font("Arial", 'B', 12)
-        pdf.cell(0, 10, "  ELENCO TITULAR", 0, 1, 'L', fill=True)
-        pdf.ln(2)
+        # Cores no Header
+        pdf.set_y(38)
+        pdf.cell(65, 5, "", 0, 0) # Espaço
+        pdf.cell(20, 5, "Cores:", 0, 0, 'R')
         
-        pdf.set_font("Arial", '', 11)
+        # Desenha bolinhas/quadrados das cores
+        cores_escolhidas = [cor1, cor2]
+        if qtd_cores == 3: cores_escolhidas.append(cor3)
         
-        soma_ov_titular = 0
-        qtd_titular = 0
+        x_cor = 90
+        for c_nome in cores_escolhidas:
+            rgb = MAPA_CORES.get(c_nome, (255,255,255))
+            pdf.set_fill_color(*rgb)
+            pdf.rect(x_cor, 38, 5, 5, 'F')
+            x_cor += 7
+            
+        pdf.ln(20) # Sai do Header
         
-        for p in lista_visual:
-            if p['TIPO'] == 'TITULAR':
-                nome = str(p.get('NAME','')).encode('latin-1','ignore').decode('latin-1')
-                pos = p.get('POS_DISPLAY', '-')
-                ov = p.get('OVERALL', 0)
-                # Recupera o número salvo na sessão usando a chave
-                num_camisa = st.session_state.numeros.get(p['KEY_NUM'], 0)
-                
-                try: 
-                    ov_val = float(ov)
-                    soma_ov_titular += ov_val
-                    qtd_titular += 1
-                except: pass
+        # Tabelas
+        pdf.set_text_color(0,0,0)
+        
+        def print_tabela(titulo, tipo_filtro):
+            pdf.set_fill_color(220, 220, 220)
+            pdf.set_font("Arial", 'B', 12)
+            pdf.cell(0, 8, f"  {titulo}", 0, 1, 'L', fill=True)
+            pdf.ln(1)
+            pdf.set_font("Arial", '', 10)
+            
+            soma = 0; qtd = 0
+            for p in lista:
+                if p['T'] == tipo_filtro:
+                    n = str(p.get('NAME','')).encode('latin-1','ignore').decode('latin-1')
+                    num = st.session_state.numeros.get(p['K'], 0)
+                    ov = p.get('OVERALL', 0)
+                    try: soma += float(ov); qtd += 1
+                    except: pass
+                    
+                    pdf.cell(20, 7, p['P'], 0, 0, 'C')
+                    pdf.cell(15, 7, str(num), 0, 0, 'C')
+                    pdf.cell(125, 7, n, 0, 0, 'L')
+                    pdf.set_font("Arial", 'B', 10)
+                    pdf.cell(30, 7, str(ov), 0, 1, 'C')
+                    pdf.set_font("Arial", '', 10)
+                    pdf.set_draw_color(220,220,220); pdf.line(10, pdf.get_y(), 200, pdf.get_y())
+                    pdf.ln(7)
+            return soma, qtd
 
-                # POS | Nº | NOME | OV
-                pdf.cell(20, 8, pos, 0, 0, 'C')
-                pdf.cell(15, 8, str(num_camisa), 0, 0, 'C') # Coluna do Número
-                pdf.cell(125, 8, nome, 0, 0, 'L')
-                pdf.set_font("Arial", 'B', 11)
-                pdf.cell(30, 8, str(ov), 0, 1, 'C')
-                pdf.set_font("Arial", '', 11)
-                
-                pdf.set_draw_color(200,200,200)
-                pdf.line(10, pdf.get_y(), 200, pdf.get_y())
-
-        # --- TABELA DE RESERVAS ---
+        s_tit, q_tit = print_tabela("ELENCO TITULAR", "TITULAR")
         pdf.ln(5)
-        pdf.set_fill_color(220, 220, 220)
-        pdf.set_font("Arial", 'B', 12)
-        pdf.cell(0, 10, "  BANCO DE RESERVAS", 0, 1, 'L', fill=True)
-        pdf.ln(2)
+        print_tabela("BANCO DE RESERVAS", "RESERVA")
         
-        pdf.set_font("Arial", '', 11)
-        for p in lista_visual:
-            if p['TIPO'] == 'RESERVA':
-                nome = str(p.get('NAME','')).encode('latin-1','ignore').decode('latin-1')
-                pos = p.get('POS_DISPLAY', '-')
-                ov = p.get('OVERALL', 0)
-                num_camisa = st.session_state.numeros.get(p['KEY_NUM'], 0)
-                
-                pdf.cell(20, 8, pos, 0, 0, 'C')
-                pdf.cell(15, 8, str(num_camisa), 0, 0, 'C')
-                pdf.cell(125, 8, nome, 0, 0, 'L')
-                pdf.set_font("Arial", 'B', 11)
-                pdf.cell(30, 8, str(ov), 0, 1, 'C')
-                pdf.set_font("Arial", '', 11)
-                pdf.set_draw_color(200,200,200)
-                pdf.line(10, pdf.get_y(), 200, pdf.get_y())
-        
-        # --- RODAPÉ ---
+        # Rodapé
         pdf.ln(10)
-        media = soma_ov_titular / qtd_titular if qtd_titular > 0 else 0
+        med = s_tit/q_tit if q_tit > 0 else 0
+        pdf.set_fill_color(50,50,50); pdf.set_text_color(255,255,255)
+        pdf.set_font("Arial", 'B', 12)
+        pdf.cell(0, 10, f"FORÇA DO TIME (Média Titular): {med:.1f}", 0, 1, 'C', fill=True)
         
-        pdf.set_fill_color(50, 50, 50)
-        pdf.set_text_color(255, 255, 255)
-        pdf.set_font("Arial", 'B', 14)
-        pdf.cell(0, 12, f"FORÇA DO TIME (Média Titular): {media:.1f}", 0, 1, 'C', fill=True)
-        
-        pdf_bytes = pdf.output(dest='S').encode('latin-1')
-
-        # EMAIL
+        # Envio
         msg = MIMEMultipart()
         msg['From'], msg['To'] = EMAIL_REMETENTE, EMAIL_DESTINO
-        msg['Subject'] = f"Escalação Oficial: {nome_time}"
-        msg.attach(MIMEText(f"Time: {nome_time}\nDupla: {int1}/{int2}\n\nConfira a escalação oficial no PDF anexo.", 'plain'))
+        msg['Subject'] = f"Inscrição: {nome_time}"
+        msg.attach(MIMEText(f"Time: {nome_time}\nCamisa: {modelo_camisa}", 'plain'))
         
-        att1 = MIMEBase('application', 'pdf')
-        att1.set_payload(pdf_bytes); encoders.encode_base64(att1)
-        att1.add_header('Content-Disposition', 'attachment; filename="Escalacao.pdf"'); msg.attach(att1)
+        # Anexos
+        files = [
+            ('Escalacao.pdf', pdf.output(dest='S').encode('latin-1'), 'application/pdf'),
+            (f'Master_{nome_time}.csv', csv_str.encode('utf-8-sig'), 'text/csv')
+        ]
+        if escudo: files.append(('Escudo.png', escudo.getvalue(), 'image/png'))
         
-        att2 = MIMEBase('text', 'csv')
-        att2.set_payload(csv_str.encode('utf-8-sig')); encoders.encode_base64(att2)
-        att2.add_header('Content-Disposition', f'attachment; filename="Master_{nome_time}.csv"'); msg.attach(att2)
-        
-        if escudo:
-            att3 = MIMEBase('image', 'png')
-            att3.set_payload(escudo.getvalue()); encoders.encode_base64(att3)
-            att3.add_header('Content-Disposition', 'attachment; filename="Escudo.png"'); msg.attach(att3)
-            
+        for fname, fcontent, ftype in files:
+            att = MIMEBase(*ftype.split('/'))
+            att.set_payload(fcontent); encoders.encode_base64(att)
+            att.add_header('Content-Disposition', f'attachment; filename="{fname}"')
+            msg.attach(att)
+
         with smtplib.SMTP_SSL('smtp.gmail.com', 465) as s:
-            s.login(EMAIL_REMETENTE, SENHA_APP)
-            s.send_message(msg)
+            s.login(EMAIL_REMETENTE, SENHA_APP); s.send_message(msg)
             
-        st.success("✅ Inscrição Enviada com Sucesso!")
-        
+        st.success("✅ Inscrição Enviada!")
+
     except Exception as e:
-        st.error(f"Erro no processamento: {e}")
+        st.error(f"Erro: {e}")
