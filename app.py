@@ -131,13 +131,9 @@ with st.sidebar:
     int1 = st.text_input("Integrante 1", key="input_int1")
     int2 = st.text_input("Integrante 2", key="input_int2")
     email_user = st.text_input("E-mail", key="input_email")
+    nome_time = st.text_input("Nome do Time", "MEU TIME", key="input_team")
     
-    # --- MUDANÇA AQUI: Nome e Formação lado a lado ---
-    c_time, c_fmt = st.columns([0.65, 0.35])
-    with c_time:
-        nome_time = st.text_input("Nome do Time", "MEU TIME", key="input_team")
-    with c_fmt:
-        formacao = st.selectbox("Formação", ["4-5-1", "3-4-3", "4-4-2", "4-3-3", "3-5-2"], key="input_fmt")
+    # --- FORMACAO REMOVIDA DAQUI ---
         
     escudo = st.file_uploader("Escudo (Logo)", type=['png','jpg'], key="input_logo")
     
@@ -211,6 +207,15 @@ def seletor(label, df, key):
 
 # --- MAIN ---
 st.title(f"⚽ {nome_time.upper()}")
+
+# --- FORMAÇÃO AQUI ---
+st.markdown("---")
+col_tatica, col_vazio = st.columns([1, 2]) # Ajuste visual
+with col_tatica:
+    st.subheader("Esquema Tático")
+    formacao = st.selectbox("Escolha a Formação:", ["4-5-1", "3-4-3", "4-4-2", "4-3-3", "3-5-2"], key="input_fmt")
+st.markdown("---")
+
 config = {"4-5-1": {"Z":2,"L":2,"M":5,"A":1}, "3-4-3": {"Z":3,"L":2,"M":2,"A":3}, "4-4-2": {"Z":2,"L":2,"M":4,"A":2}, "4-3-3": {"Z":2,"L":2,"M":3,"A":3}, "3-5-2": {"Z":3,"L":2,"M":3,"A":2}}[formacao]
 
 c1, c2 = st.columns([2, 1])
