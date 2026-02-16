@@ -64,6 +64,8 @@ st.markdown("""
 <style>
     [data-testid="stNumberInput"] button {display: none;}
     [data-testid="stNumberInput"] input {width: 100%;}
+    /* Pequeno ajuste para alinhar metricas */
+    [data-testid="stMetricValue"] {font-size: 1.2rem;}
 </style>
 """, unsafe_allow_html=True)
 
@@ -125,7 +127,7 @@ def reset_callback():
 custo_total = sum([p.get('MARKET PRICE', 0.0) for p in st.session_state.escolhas.values() if p])
 saldo = ORCAMENTO_MAX - custo_total
 
-# --- SIDEBAR ---
+# --- SIDEBAR (Apenas Cadastros) ---
 with st.sidebar:
     st.header("📋 Cadastro")
     int1 = st.text_input("Integrante 1", key="input_int1")
@@ -133,8 +135,6 @@ with st.sidebar:
     email_user = st.text_input("E-mail", key="input_email")
     nome_time = st.text_input("Nome do Time", "MEU TIME", key="input_team")
     
-    # --- FORMACAO REMOVIDA DAQUI ---
-        
     escudo = st.file_uploader("Escudo (Logo)", type=['png','jpg'], key="input_logo")
     
     st.markdown("---")
@@ -157,20 +157,41 @@ with st.sidebar:
     cor3 = None
     if qtd_cores == 3:
         cor3 = st.selectbox("Extra", list(MAPA_CORES.keys()), index=2, key="input_c3")
-    
-    st.markdown("---")
-    st.subheader("💰 Finanças")
-    
-    percentual_gasto = min(custo_total / ORCAMENTO_MAX, 1.0)
-    st.progress(percentual_gasto)
-    col_met1, col_met2 = st.columns(2)
-    col_met1.metric("Gasto", f"€{custo_total:.0f}")
-    col_met2.metric("Saldo", f"€{saldo:.0f}")
-    
-    st.markdown("---")
-    filtro_p = st.number_input("Filtrar Preço Máx (€)", 0.0, 3000.0, 2000.0, 10.0, key="input_filter")
 
-# --- FUNÇÕES ---
+# --- MAIN PAGE (Painel de Controle) ---
+st.title(f"⚽ {nome_time.upper()}")
+
+st.markdown("---")
+
+# Layout de Controle: Formação | Filtro | Finanças
+c_fmt, c_filt, c_fin = st.columns([1, 0.8, 1.2])
+
+with c_fmt:
+    formacao = st.selectbox("Esquema Tático", ["4-5-1", "3-4-3", "4-4-2", "4-3-3", "3-5-2"], key="input_fmt")
+
+with c_filt:
+    filtro_p = st.number_input("Preço Máx (€)", 0.0, 3000.0, 2000.0, 10.0, key="input_filter")
+
+with c_fin:
+    # Métricas Financeiras Compactas
+    percentual_gasto = min(custo_total / ORCAMENTO_MAX, 1.0)
+    
+    # Colunas internas para métricas
+    m1, m2 = st.columns(2)
+    m1.metric("Gasto", f"€{custo_total:.0f}")
+    m2.metric("Saldo", f"€{saldo:.0f}")
+    
+    # Barra colorida
+    color = "green"
+    if percentual_gasto > 0.75: color = "orange"
+    if percentual_gasto > 0.95: color = "red"
+    st.progress(percentual_gasto)
+
+st.markdown("---")
+
+# --- LÓGICA DE SELEÇÃO E MONTAGEM DO TIME ---
+config = {"4-5-1": {"Z":2,"L":2,"M":5,"A":1}, "3-4-3": {"Z":3,"L":2,"M":2,"A":3}, "4-4-2": {"Z":2,"L":2,"M":4,"A":2}, "4-3-3": {"Z":2,"L":2,"M":3,"A":3}, "3-5-2": {"Z":3,"L":2,"M":3,"A":2}}[formacao]
+
 def format_func(row):
     if row is None: return "Selecione..."
     return f"ID: {row.get('INDEX','?')} | {row.get('NAME','?')} - OV: {row.get('OVERALL','?')} - €{row.get('MARKET PRICE',0):.1f}"
@@ -204,19 +225,6 @@ def seletor(label, df, key):
         st.session_state.escolhas[key] = new_sel
         st.rerun()
     return new_sel
-
-# --- MAIN ---
-st.title(f"⚽ {nome_time.upper()}")
-
-# --- FORMAÇÃO AQUI ---
-st.markdown("---")
-col_tatica, col_vazio = st.columns([1, 2]) # Ajuste visual
-with col_tatica:
-    st.subheader("Esquema Tático")
-    formacao = st.selectbox("Escolha a Formação:", ["4-5-1", "3-4-3", "4-4-2", "4-3-3", "3-5-2"], key="input_fmt")
-st.markdown("---")
-
-config = {"4-5-1": {"Z":2,"L":2,"M":5,"A":1}, "3-4-3": {"Z":3,"L":2,"M":2,"A":3}, "4-4-2": {"Z":2,"L":2,"M":4,"A":2}, "4-3-3": {"Z":2,"L":2,"M":3,"A":3}, "3-5-2": {"Z":3,"L":2,"M":3,"A":2}}[formacao]
 
 c1, c2 = st.columns([2, 1])
 lista = []
