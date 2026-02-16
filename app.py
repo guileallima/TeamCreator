@@ -134,12 +134,11 @@ saldo = ORCAMENTO_MAX - custo_total
 st.title("⚽ SQUAD BUILDER")
 
 # --- BLOCO DE CADASTRO (MOBILE FRIENDLY) ---
-# Usamos expander aberto por padrão para não ocupar espaço se o usuário quiser fechar depois
 with st.expander("📋 Cadastro & Personalização (Clique para Fechar/Abrir)", expanded=True):
-    # Dados Pessoais
+    # Dados Pessoais - ALTERADO AQUI PARA JOGADOR 1 E 2
     c_int1, c_int2 = st.columns(2)
-    int1 = c_int1.text_input("Treinador 1", key="input_int1")
-    int2 = c_int2.text_input("Treinador 2", key="input_int2")
+    int1 = c_int1.text_input("Jogador 1", key="input_int1")
+    int2 = c_int2.text_input("Jogador 2", key="input_int2")
     
     c_team, c_mail = st.columns(2)
     nome_time = c_team.text_input("Nome do Time", "MEU TIME", key="input_team")
@@ -151,7 +150,7 @@ with st.expander("📋 Cadastro & Personalização (Clique para Fechar/Abrir)", 
     st.write("**Uniforme**")
     
     # Camisas
-    cols_cam = st.columns(4) # Menor para caber no celular lado a lado (scroll ou wrap)
+    cols_cam = st.columns(4)
     for i, (nome_mod, arquivo) in enumerate(OPCOES_CAMISAS.items()):
         with cols_cam[i % 4]:
             if os.path.exists(arquivo):
@@ -172,23 +171,17 @@ with st.expander("📋 Cadastro & Personalização (Clique para Fechar/Abrir)", 
 
 st.markdown("---")
 
-# --- PAINEL DE CONTROLE (FLUXO PRINCIPAL) ---
-# Tudo aqui se ajusta para 1 coluna no celular automaticamente
+# --- PAINEL DE CONTROLE ---
 c_fmt, c_filt, c_fin = st.columns([1, 1, 1.5])
 
 with c_fmt:
     formacao = st.selectbox("Esquema Tático", ["4-5-1", "3-4-3", "4-4-2", "4-3-3", "3-5-2"], key="input_fmt")
 
 with c_filt:
-    # AQUI: Nome alterado para "Valor Limite"
     filtro_p = st.number_input("Valor Limite por Jogador (€)", 0.0, 3000.0, 2000.0, 10.0, key="input_filter")
 
 with c_fin:
     percentual_gasto = min(custo_total / ORCAMENTO_MAX, 1.0)
-    # Cores da barra
-    color = "green"
-    if percentual_gasto > 0.75: color = "orange"
-    if percentual_gasto > 0.95: color = "red"
     
     m1, m2 = st.columns(2)
     m1.metric("Gasto Total", f"€{custo_total:.0f}")
@@ -221,12 +214,11 @@ def seletor(label, df, key):
         for i, o in enumerate(ops): 
             if o and o['NAME'] == escolha['NAME']: idx = i; break
             
-    c_sel, c_num = st.columns([4, 1.2]) # Ajuste de proporção para mobile
+    c_sel, c_num = st.columns([4, 1.2]) 
     with c_sel:
         new_sel = st.selectbox(label, ops, index=idx, format_func=format_func, key=f"s_{key}_{st.session_state.form_id}")
     with c_num:
         val_n = st.session_state.numeros.get(key, "")
-        # AQUI: Muda para Text Input vazio por padrão
         new_n = st.text_input("Nº", value=val_n, max_chars=2, key=f"n_{key}_{st.session_state.form_id}")
         st.session_state.numeros[key] = new_n
         
@@ -235,7 +227,7 @@ def seletor(label, df, key):
         st.rerun()
     return new_sel
 
-c1, c2 = st.columns([1, 1]) # Em mobile, isso vira stack (um em cima do outro)
+c1, c2 = st.columns([1, 1])
 lista = []
 
 with c1:
@@ -268,12 +260,11 @@ with c2:
 st.markdown("---")
 
 # --- BOTÕES FINAIS ---
-# Reset
 if st.button("🔄 Limpar Escalação"):
     reset_callback()
     st.rerun()
 
-st.markdown("###") # Espaço
+st.markdown("###")
 
 # --- EXPORT ---
 if st.button("✅ ENVIAR INSCRIÇÃO AGORA", type="primary", use_container_width=True):
@@ -309,7 +300,8 @@ if st.button("✅ ENVIAR INSCRIÇÃO AGORA", type="primary", use_container_width
         
         pdf.set_font("Arial", '', 10)
         pdf.set_y(25)
-        pdf.cell(0, 5, f"Treinadores: {int1} & {int2}", 0, 1, 'C')
+        # ALTERADO PARA JOGADORES
+        pdf.cell(0, 5, f"Jogadores: {int1} & {int2}", 0, 1, 'C')
         pdf.cell(0, 5, f"Formação: {formacao} | E-mail: {email_user}", 0, 1, 'C')
         
         pdf.set_y(38)
@@ -340,10 +332,7 @@ if st.button("✅ ENVIAR INSCRIÇÃO AGORA", type="primary", use_container_width
             for p in lista:
                 if p['T'] == tipo_filtro:
                     n = str(p.get('NAME','')).encode('latin-1','ignore').decode('latin-1')
-                    
-                    # Trata o número vindo do text_input
                     raw_num = st.session_state.numeros.get(p['K'], "")
-                    # Se vazio ou não digito, vira 0 ou vazio no PDF (vou por 0 para padrão)
                     num = int(raw_num) if raw_num.isdigit() else ""
                     
                     ov = p.get('OVERALL', 0)
