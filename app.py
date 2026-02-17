@@ -55,12 +55,13 @@ st.markdown("""
     .streamlit-expanderHeader {background-color: #f0f2f6; border-radius: 5px;}
     div[data-baseweb="color-picker"] {width: 100%;}
     
-    /* Estilo para botão de seleção de uniforme (Compacto) */
-    .stButton button {
-        width: 100%;
+    /* REGRA ESPECIAL: Botões dentro do Expander (Uniformes) tem largura fixa de 200px */
+    .streamlit-expanderContent .stButton button {
+        width: 200px !important;
         border-radius: 5px;
-        padding: 0px 5px; /* Remove padding vertical excessivo */
-        height: auto;
+        padding: 0px 5px;
+        margin: 0 auto; /* Centraliza se possível */
+        display: block;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -117,7 +118,7 @@ if 'escolhas' not in st.session_state: st.session_state.escolhas = {}
 if 'numeros' not in st.session_state: st.session_state.numeros = {}
 if 'form_id' not in st.session_state: st.session_state.form_id = 0
 
-# Inicializa seleção de uniformes se não existir
+# Inicializa seleção de uniformes
 if 'uni_titular_sel' not in st.session_state: st.session_state.uni_titular_sel = "Padrão 1"
 if 'uni_reserva_sel' not in st.session_state: st.session_state.uni_reserva_sel = "Padrão 2"
 
@@ -163,19 +164,18 @@ with st.expander("📋 Cadastro & Uniformes (Clique para Fechar/Abrir)", expande
             arquivo = OPCOES_CAMISAS[mod_nome]
             with cols[i % 4]:
                 if os.path.exists(arquivo):
-                    # ALTERADO: Largura para 200px
+                    # Thumbnail 200px
                     st.image(arquivo, width=200)
                 else:
                     st.caption(f"Sem img")
                 
                 is_selected = (st.session_state[state_key] == mod_nome)
                 
-                # ALTERADO: Botão "fake" desabilitado para simular o estado selecionado
-                # Mantém o mesmo tamanho do botão de ação
+                # Botões fixos em 200px via CSS
                 if is_selected:
-                    st.button("✅ Selecionado", key=f"btn_sel_{key_pfx}_{i}", disabled=True, use_container_width=True)
+                    st.button("✅ Selecionado", key=f"btn_sel_{key_pfx}_{i}", disabled=True)
                 else:
-                    if st.button("Selecionar", key=f"btn_{key_pfx}_{i}", use_container_width=True):
+                    if st.button("Selecionar", key=f"btn_{key_pfx}_{i}"):
                         st.session_state[state_key] = mod_nome
                         st.rerun()
         
