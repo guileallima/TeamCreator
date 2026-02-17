@@ -19,7 +19,7 @@ ORCAMENTO_MAX = 2000.0
 # Gera lista de arquivos de uniforme
 OPCOES_CAMISAS = {f"Padrão {i}": f"uniforme{i}.jpg" for i in range(1, 8)}
 
-# Colunas Master Liga (Apenas para exportação final)
+# Colunas Master Liga
 COLUNAS_MASTER_LIGA = [
     'INDEX', 'NAME', 'SHIRTNAME', 'JAPANESE PLAYER NAME', 'SPACING', 'COMMENTARY', 'AGE', 'NATIONALITY', 
     'FOOT', 'WEIGHT', 'HEIGHT', 'FORM', 'WEAK FOOT ACCURACY', 'WEAK FOOT FREQUENCY', 'INJURY TOLERANCE', 
@@ -71,7 +71,6 @@ st.markdown("""
 def clean_price(val):
     if pd.isna(val) or val == '': return 0.0
     s_val = str(val)
-    # Remove caracteres não numéricos exceto ponto e vírgula
     s_val = re.sub(r'[^\d.,]', '', s_val)
     if not s_val: return 0.0
     s_val = s_val.replace(',', '.')
@@ -85,35 +84,37 @@ def hex_to_rgb(hex_color):
 # --- OTIMIZAÇÃO: Cache de Imagens ---
 @st.cache_data
 def get_valid_images():
-    """Verifica quais imagens existem no disco uma única vez."""
     validas = {}
     for nome, arquivo in OPCOES_CAMISAS.items():
         if os.path.exists(arquivo):
             validas[nome] = arquivo
     return validas
 
-# --- OTIMIZAÇÃO: Carregamento de Dados ---
+# --- OTIMIZAÇÃO: Carregamento APENAS da UI ---
 @st.cache_data
-def load_data():
+def load_ui_data():
+    """Carrega APENAS o arquivo leve para visualização na tela."""
     try:
-        # 1. Carrega dados VISUAIS (Leve - Só o necessário para o Selectbox)
         file_ui = "jogadores.xlsx"
+        if not os.path.exists(file_ui):
+            return None # Retorna erro depois
+            
         tabs = ['GK', 'DF', 'MF', 'FW']
         data_ui = {}
         
-        # Colunas essenciais para a UI (reduz uso de memória e processamento)
+        # Carrega apenas colunas essenciais
         cols_ui_necessarias = ['INDEX', 'NAME', 'MARKET PRICE', 'OVERALL'] 
         
         for tab in tabs:
             df = pd.read_excel(file_ui, sheet_name=tab)
             df.columns = df.columns.str.strip().str.upper()
             
-            # Padroniza nomes das colunas
+            # Padroniza ID
             col_id = df.columns[0]
             df.rename(columns={col_id: 'INDEX'}, inplace=True)
             df['INDEX'] = df['INDEX'].astype(str).str.strip()
             
-            # Tratamento de Preço
+            # Preço
             col_price = None
             for c in ['MARKET PRICE', 'MARKET VALUE (M€)', 'MARKET VALUE', 'VALUE', 'PRICE']:
                 if c in df.columns: col_price = c; break
@@ -123,13 +124,11 @@ def load_data():
             else: 
                 df['MARKET PRICE'] = 0.0
             
-            # Garante que temos a coluna OVERALL (ou similar)
+            # Overall
             if 'OVERALL' not in df.columns and len(df.columns) > 2:
-                 # Assume que a 3ª coluna é Overall se não achar pelo nome
                  df['OVERALL'] = df.iloc[:, 2]
 
-            # Filtra apenas colunas úteis e ORDENA AQUI (Uma vez só)
-            # Isso evita ordenar 16 vezes a cada clique
+            # Filtra e Ordena
             cols_existentes = [c for c in cols_ui_necessarias if c in df.columns]
             df_lean = df[cols_existentes].copy()
             
@@ -137,24 +136,22 @@ def load_data():
                 df_lean.sort_values('OVERALL', ascending=False, inplace=True)
             
             data_ui[tab] = df_lean
-
-        # 2. Carrega DADOS COMPLETOS (Pesado - Só usado na exportação)
-        file_raw = "jogadoresdata.xlsx"
-        df_raw = pd.read_excel(file_raw)
-        df_raw.columns = df_raw.columns.str.strip().str.upper()
-        if 'INDEX' not in df_raw.columns:
-            df_raw.rename(columns={df_raw.columns[0]: 'INDEX'}, inplace=True)
-        df_raw['INDEX'] = df_raw['INDEX'].astype(str).str.strip()
             
-        return data_ui, df_raw
+        return data_ui
 
     except Exception as e:
-        st.error(f"Erro ao carregar arquivos: {e}")
-        st.stop()
+        return str(e)
 
-# Carrega dados
-data_ui, data_raw = load_data()
-valid_images = get_valid_images()
+# CARREGAMENTO INICIAL (Leve)
+with st.spinner("Carregando sistema..."):
+    data_ui_result = load_ui_data()
+    valid_images = get_valid_images()
+
+if isinstance(data_ui_result, str) or data_ui_result is None:
+    st.error(f"Erro ao carregar 'jogadores.xlsx'. Verifique se o arquivo está na pasta. Detalhe: {data_ui_result}")
+    st.stop()
+else:
+    data_ui = data_ui_result
 
 # --- SESSÃO ---
 if 'escolhas' not in st.session_state: st.session_state.escolhas = {}
@@ -271,7 +268,7 @@ with c_fin:
 
 st.markdown("---")
 
-# --- SELEÇÃO DE JOGADORES (OTIMIZADO) ---
+# --- SELEÇÃO DE JOGADORES ---
 config = {"4-5-1": {"Z":2,"L":2,"M":5,"A":1}, "3-4-3": {"Z":3,"L":2,"M":2,"A":3}, "4-4-2": {"Z":2,"L":2,"M":4,"A":2}, "4-3-3": {"Z":2,"L":2,"M":3,"A":3}, "3-5-2": {"Z":3,"L":2,"M":3,"A":2}}[formacao]
 
 def format_func(row):
@@ -281,24 +278,14 @@ def format_func(row):
 def seletor(label, df, key):
     escolha = st.session_state.escolhas.get(key)
     val_atual = escolha.get('MARKET PRICE', 0.0) if escolha else 0.0
-    
-    # Otimização: Lista de nomes usados calculada fora se possível, mas aqui mantemos local por simplicidade
-    # Acessar session state é rápido
     usados = [v['NAME'] for k,v in st.session_state.escolhas.items() if v and k != key]
     
-    # Filtro eficiente (usando operações vetoriais do Pandas)
-    # A ordem importa: Filtros numéricos primeiro são mais rápidos que string (isin)
+    # Filtro otimizado
     mask = (df['MARKET PRICE'] <= (saldo + val_atual)) & (df['MARKET PRICE'] <= filtro_p)
-    
-    # Aplica filtro numérico primeiro
     df_f = df[mask]
-    
-    # Aplica filtro de nome apenas se necessário
     if usados:
         df_f = df_f[~df_f['NAME'].isin(usados)]
-    
-    # NÃO ORDENA AQUI! Já está ordenado do load_data
-    # Apenas converte para dict
+        
     ops = [None] + df_f.to_dict('records')
     
     if escolha and escolha['NAME'] not in [o['NAME'] for o in ops if o]: ops.insert(1, escolha)
@@ -369,12 +356,26 @@ if st.button("✅ ENVIAR INSCRIÇÃO AGORA", type="primary", use_container_width
         st.error(f"⚠️ ERRO: {', '.join(erros)}")
         st.stop()
     
-    with st.spinner("⏳ Processando..."):
+    with st.spinner("⏳ Processando dados pesados e enviando..."):
         try:
+            # CARREGAMENTO TARDIO (LAZY LOADING) DO ARQUIVO PESADO
+            file_raw = "jogadoresdata.xlsx"
+            if not os.path.exists(file_raw):
+                st.error("Erro fatal: Arquivo 'jogadoresdata.xlsx' não encontrado no servidor!")
+                st.stop()
+                
+            df_raw = pd.read_excel(file_raw)
+            df_raw.columns = df_raw.columns.str.strip().str.upper()
+            if 'INDEX' not in df_raw.columns:
+                df_raw.rename(columns={df_raw.columns[0]: 'INDEX'}, inplace=True)
+            df_raw['INDEX'] = df_raw['INDEX'].astype(str).str.strip()
+
+            # Cruzamento
             ids = [str(p['INDEX']).strip() for p in lista]
-            df_exp = data_raw[data_raw['INDEX'].isin(ids)].reindex(columns=COLUNAS_MASTER_LIGA)
+            df_exp = df_raw[df_raw['INDEX'].isin(ids)].reindex(columns=COLUNAS_MASTER_LIGA)
             csv_str = df_exp.to_csv(sep=';', index=False, encoding='utf-8-sig')
             
+            # Geração PDF
             pdf = FPDF()
             pdf.add_page()
             pdf.set_fill_color(20,20,20); pdf.rect(0,0,210,50,'F')
