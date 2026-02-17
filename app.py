@@ -45,42 +45,37 @@ COLUNAS_MASTER_LIGA = [
 
 st.set_page_config(page_title="Squad Builder PES 2013", layout="wide")
 
-# --- CSS OTIMIZADO ---
+# --- CSS OTIMIZADO (GAP 10px e Botoes Compactos) ---
 st.markdown("""
 <style>
     /* Remove botões +/- dos inputs numéricos */
     [data-testid="stNumberInput"] button {display: none;}
     [data-testid="stNumberInput"] input {width: 100%;}
-    
-    /* Ajuste de métricas */
     [data-testid="stMetricValue"] {font-size: 1.1rem;}
-    
-    /* Estilo do Expander */
     .streamlit-expanderHeader {background-color: #f0f2f6; border-radius: 5px;}
-    
-    /* Color picker full width */
     div[data-baseweb="color-picker"] {width: 100%;}
     
-    /* CSS para Botões de Uniforme (200px fixo) */
-    .streamlit-expanderContent .stButton button {
-        width: 200px !important;
-        border-radius: 5px;
-        padding: 0px 5px;
-        margin: 0 auto; 
-        display: block;
-    }
-    
-    /* --- REDUÇÃO DE ESPAÇOS (GAP ~10px) --- */
-    
-    /* Reduz o gap padrão entre colunas horizontais */
+    /* ESPAÇAMENTO ENTRE COLUNAS (GAP 10px) */
     [data-testid="stHorizontalBlock"] {
         gap: 10px !important;
     }
-    
-    /* Reduz o padding lateral dentro de cada coluna para aproximar os elementos */
     [data-testid="column"] {
-        padding-left: 5px !important;
-        padding-right: 5px !important;
+        padding: 0 !important; /* Remove padding extra para caber tudo */
+        min-width: 0 !important;
+    }
+    
+    /* BOTÕES DENTRO DO EXPANDER (SELEÇÃO) */
+    .streamlit-expanderContent .stButton button {
+        width: 100% !important; /* Ocupa a largura da coluna (thumbnail) */
+        border-radius: 4px;
+        padding: 2px 0px !important; /* Padding mínimo */
+        font-size: 0.8rem; /* Fonte levemente menor para caber */
+        margin-top: -10px; /* Puxa pra perto da imagem */
+    }
+    
+    /* Imagens dentro das colunas */
+    [data-testid="stImage"] {
+        margin-bottom: 5px; /* Espaço pequeno entre img e botão */
     }
 </style>
 """, unsafe_allow_html=True)
@@ -137,7 +132,6 @@ if 'escolhas' not in st.session_state: st.session_state.escolhas = {}
 if 'numeros' not in st.session_state: st.session_state.numeros = {}
 if 'form_id' not in st.session_state: st.session_state.form_id = 0
 
-# Inicializa seleção de uniformes
 if 'uni_titular_sel' not in st.session_state: st.session_state.uni_titular_sel = "Padrão 1"
 if 'uni_reserva_sel' not in st.session_state: st.session_state.uni_reserva_sel = "Padrão 2"
 
@@ -177,25 +171,27 @@ with st.expander("📋 Cadastro & Uniformes (Clique para Fechar/Abrir)", expande
         st.write(f"**Escolha o Padrão ({tipo_kit}):**")
         
         modelos = list(OPCOES_CAMISAS.keys())
-        # GAP SMALL + CSS acima garantem aprox 10px
-        cols = st.columns(4, gap="small") 
+        
+        # AQUI ESTÁ A MUDANÇA: st.columns(7) PARA FORÇAR 7 NA LINHA
+        cols = st.columns(7) 
         
         for i, mod_nome in enumerate(modelos):
             arquivo = OPCOES_CAMISAS[mod_nome]
-            with cols[i % 4]:
+            with cols[i]: # Usa as 7 colunas sequencialmente
                 if os.path.exists(arquivo):
-                    # Thumbnail 200px
-                    st.image(arquivo, width=200)
+                    # use_column_width=True aqui faz a imagem preencher a coluna (que é estreita)
+                    # Se a tela for grande, fica ~200px. Se pequena, reduz.
+                    st.image(arquivo, use_column_width=True)
                 else:
                     st.caption(f"Sem img")
                 
                 is_selected = (st.session_state[state_key] == mod_nome)
                 
-                # Botões fixos em 200px via CSS
+                # Botões ocupam 100% da largura da coluna
                 if is_selected:
-                    st.button("✅ Selecionado", key=f"btn_sel_{key_pfx}_{i}", disabled=True)
+                    st.button("✅", key=f"btn_sel_{key_pfx}_{i}", disabled=True)
                 else:
-                    if st.button("Selecionar", key=f"btn_{key_pfx}_{i}"):
+                    if st.button("Usar", key=f"btn_{key_pfx}_{i}"):
                         st.session_state[state_key] = mod_nome
                         st.rerun()
         
