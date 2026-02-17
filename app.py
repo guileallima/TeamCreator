@@ -11,8 +11,6 @@ import os
 import re
 
 # --- CONFIGURAÇÕES GERAIS ---
-# ATENÇÃO: Para funcionar, você precisa gerar uma "Senha de App" na sua conta Google
-# Não use a senha normal do seu e-mail.
 EMAIL_REMETENTE = "leallimagui@gmail.com" 
 SENHA_APP = "nmrytcivcuidhryn" 
 EMAIL_DESTINO = "leallimagui@gmail.com"
@@ -21,7 +19,7 @@ ORCAMENTO_MAX = 2000.0
 # Gera lista de arquivos de uniforme
 OPCOES_CAMISAS = {f"Padrão {i}": f"uniforme{i}.jpg" for i in range(1, 8)}
 
-# Colunas Master Liga
+# Colunas Master Liga (Apenas para exportação final)
 COLUNAS_MASTER_LIGA = [
     'INDEX', 'NAME', 'SHIRTNAME', 'JAPANESE PLAYER NAME', 'SPACING', 'COMMENTARY', 'AGE', 'NATIONALITY', 
     'FOOT', 'WEIGHT', 'HEIGHT', 'FORM', 'WEAK FOOT ACCURACY', 'WEAK FOOT FREQUENCY', 'INJURY TOLERANCE', 
@@ -73,6 +71,7 @@ st.markdown("""
 def clean_price(val):
     if pd.isna(val) or val == '': return 0.0
     s_val = str(val)
+    # Remove caracteres não numéricos exceto ponto e vírgula
     s_val = re.sub(r'[^\d.,]', '', s_val)
     if not s_val: return 0.0
     s_val = s_val.replace(',', '.')
@@ -83,26 +82,63 @@ def hex_to_rgb(hex_color):
     hex_color = hex_color.lstrip('#')
     return tuple(int(hex_color[i:i+2], 16) for i in (0, 2, 4))
 
+# --- OTIMIZAÇÃO: Cache de Imagens ---
+@st.cache_data
+def get_valid_images():
+    """Verifica quais imagens existem no disco uma única vez."""
+    validas = {}
+    for nome, arquivo in OPCOES_CAMISAS.items():
+        if os.path.exists(arquivo):
+            validas[nome] = arquivo
+    return validas
+
+# --- OTIMIZAÇÃO: Carregamento de Dados ---
 @st.cache_data
 def load_data():
     try:
+        # 1. Carrega dados VISUAIS (Leve - Só o necessário para o Selectbox)
         file_ui = "jogadores.xlsx"
         tabs = ['GK', 'DF', 'MF', 'FW']
         data_ui = {}
+        
+        # Colunas essenciais para a UI (reduz uso de memória e processamento)
+        cols_ui_necessarias = ['INDEX', 'NAME', 'MARKET PRICE', 'OVERALL'] 
+        
         for tab in tabs:
             df = pd.read_excel(file_ui, sheet_name=tab)
             df.columns = df.columns.str.strip().str.upper()
+            
+            # Padroniza nomes das colunas
             col_id = df.columns[0]
             df.rename(columns={col_id: 'INDEX'}, inplace=True)
             df['INDEX'] = df['INDEX'].astype(str).str.strip()
             
+            # Tratamento de Preço
             col_price = None
             for c in ['MARKET PRICE', 'MARKET VALUE (M€)', 'MARKET VALUE', 'VALUE', 'PRICE']:
                 if c in df.columns: col_price = c; break
-            if col_price: df['MARKET PRICE'] = df[col_price].apply(clean_price)
-            else: df['MARKET PRICE'] = 0.0
-            data_ui[tab] = df
+            
+            if col_price: 
+                df['MARKET PRICE'] = df[col_price].apply(clean_price)
+            else: 
+                df['MARKET PRICE'] = 0.0
+            
+            # Garante que temos a coluna OVERALL (ou similar)
+            if 'OVERALL' not in df.columns and len(df.columns) > 2:
+                 # Assume que a 3ª coluna é Overall se não achar pelo nome
+                 df['OVERALL'] = df.iloc[:, 2]
 
+            # Filtra apenas colunas úteis e ORDENA AQUI (Uma vez só)
+            # Isso evita ordenar 16 vezes a cada clique
+            cols_existentes = [c for c in cols_ui_necessarias if c in df.columns]
+            df_lean = df[cols_existentes].copy()
+            
+            if 'OVERALL' in df_lean.columns:
+                df_lean.sort_values('OVERALL', ascending=False, inplace=True)
+            
+            data_ui[tab] = df_lean
+
+        # 2. Carrega DADOS COMPLETOS (Pesado - Só usado na exportação)
         file_raw = "jogadoresdata.xlsx"
         df_raw = pd.read_excel(file_raw)
         df_raw.columns = df_raw.columns.str.strip().str.upper()
@@ -111,10 +147,14 @@ def load_data():
         df_raw['INDEX'] = df_raw['INDEX'].astype(str).str.strip()
             
         return data_ui, df_raw
-    except Exception as e:
-        st.error(f"Erro ao carregar arquivos: {e}"); st.stop()
 
+    except Exception as e:
+        st.error(f"Erro ao carregar arquivos: {e}")
+        st.stop()
+
+# Carrega dados
 data_ui, data_raw = load_data()
+valid_images = get_valid_images()
 
 # --- SESSÃO ---
 if 'escolhas' not in st.session_state: st.session_state.escolhas = {}
@@ -162,12 +202,14 @@ with st.expander("📋 Cadastro & Uniformes (Clique para Fechar/Abrir)", expande
         cols = st.columns(7) 
         
         for i, mod_nome in enumerate(modelos):
-            arquivo = OPCOES_CAMISAS[mod_nome]
+            # Usa cache de imagem validada
+            arquivo = valid_images.get(mod_nome)
+            
             with cols[i]:
-                if os.path.exists(arquivo):
+                if arquivo:
                     st.image(arquivo, width=200)
                 else:
-                    st.caption(f"Sem img")
+                    st.caption("?")
                 
                 is_selected = (st.session_state[state_key] == mod_nome)
                 if is_selected:
@@ -200,7 +242,7 @@ with st.expander("📋 Cadastro & Uniformes (Clique para Fechar/Abrir)", expande
             
         return {
             "modelo": st.session_state[state_key],
-            "img": OPCOES_CAMISAS[st.session_state[state_key]],
+            "img": valid_images.get(st.session_state[state_key]),
             "qtd": qtd_cores,
             "camisa": [cor_camisa_p, cor_camisa_s, cor_camisa_e],
             "calcao": cor_calcao,
@@ -229,7 +271,7 @@ with c_fin:
 
 st.markdown("---")
 
-# --- SELEÇÃO ---
+# --- SELEÇÃO DE JOGADORES (OTIMIZADO) ---
 config = {"4-5-1": {"Z":2,"L":2,"M":5,"A":1}, "3-4-3": {"Z":3,"L":2,"M":2,"A":3}, "4-4-2": {"Z":2,"L":2,"M":4,"A":2}, "4-3-3": {"Z":2,"L":2,"M":3,"A":3}, "3-5-2": {"Z":3,"L":2,"M":3,"A":2}}[formacao]
 
 def format_func(row):
@@ -239,12 +281,28 @@ def format_func(row):
 def seletor(label, df, key):
     escolha = st.session_state.escolhas.get(key)
     val_atual = escolha.get('MARKET PRICE', 0.0) if escolha else 0.0
+    
+    # Otimização: Lista de nomes usados calculada fora se possível, mas aqui mantemos local por simplicidade
+    # Acessar session state é rápido
     usados = [v['NAME'] for k,v in st.session_state.escolhas.items() if v and k != key]
-    mask = (df['MARKET PRICE'] <= (saldo + val_atual)) & (df['MARKET PRICE'] <= filtro_p) & (~df['NAME'].isin(usados))
+    
+    # Filtro eficiente (usando operações vetoriais do Pandas)
+    # A ordem importa: Filtros numéricos primeiro são mais rápidos que string (isin)
+    mask = (df['MARKET PRICE'] <= (saldo + val_atual)) & (df['MARKET PRICE'] <= filtro_p)
+    
+    # Aplica filtro numérico primeiro
     df_f = df[mask]
-    col_ov = 'OVERALL' if 'OVERALL' in df.columns else df.columns[2]
-    ops = [None] + df_f.sort_values(col_ov, ascending=False).to_dict('records')
+    
+    # Aplica filtro de nome apenas se necessário
+    if usados:
+        df_f = df_f[~df_f['NAME'].isin(usados)]
+    
+    # NÃO ORDENA AQUI! Já está ordenado do load_data
+    # Apenas converte para dict
+    ops = [None] + df_f.to_dict('records')
+    
     if escolha and escolha['NAME'] not in [o['NAME'] for o in ops if o]: ops.insert(1, escolha)
+    
     idx = 0
     if escolha:
         for i, o in enumerate(ops): 
@@ -257,6 +315,7 @@ def seletor(label, df, key):
         val_n = st.session_state.numeros.get(key, "")
         new_n = st.text_input("Nº", value=val_n, max_chars=2, key=f"n_{key}_{st.session_state.form_id}")
         st.session_state.numeros[key] = new_n
+        
     if new_sel != escolha:
         st.session_state.escolhas[key] = new_sel
         st.rerun()
@@ -269,6 +328,7 @@ with c1:
     st.subheader("Titulares")
     gk = seletor("🧤 Goleiro", data_ui['GK'], "gk_tit")
     if gk: lista.append({**gk, "T": "TITULAR", "P": "GK", "K": "gk_tit"})
+    
     for i in range(config["Z"]):
         p = seletor(f"🛡️ Zagueiro {i+1}", data_ui['DF'], f"zag_{i}")
         if p: lista.append({**p, "T": "TITULAR", "P": "CB", "K": f"zag_{i}"})
@@ -299,7 +359,6 @@ st.markdown("###")
 
 # --- EXPORT ---
 if st.button("✅ ENVIAR INSCRIÇÃO AGORA", type="primary", use_container_width=True):
-    # VALIDAÇÃO CRÍTICA
     erros = []
     if not int1: erros.append("Falta o Jogador 1")
     if not int2: erros.append("Falta o Jogador 2")
@@ -307,10 +366,10 @@ if st.button("✅ ENVIAR INSCRIÇÃO AGORA", type="primary", use_container_width
     if len(lista) < 16: erros.append(f"Faltam {16 - len(lista)} jogadores")
     
     if erros:
-        st.error(f"⚠️ ERRO DE PREENCHIMENTO: {', '.join(erros)}")
+        st.error(f"⚠️ ERRO: {', '.join(erros)}")
         st.stop()
     
-    with st.spinner("⏳ Gerando arquivos e enviando e-mail... Aguarde!"):
+    with st.spinner("⏳ Processando..."):
         try:
             ids = [str(p['INDEX']).strip() for p in lista]
             df_exp = data_raw[data_raw['INDEX'].isin(ids)].reindex(columns=COLUNAS_MASTER_LIGA)
@@ -318,8 +377,6 @@ if st.button("✅ ENVIAR INSCRIÇÃO AGORA", type="primary", use_container_width
             
             pdf = FPDF()
             pdf.add_page()
-            
-            # Header (Reduzido)
             pdf.set_fill_color(20,20,20); pdf.rect(0,0,210,50,'F')
             if escudo:
                 with tempfile.NamedTemporaryFile(delete=False, suffix=".png") as tf:
@@ -328,7 +385,6 @@ if st.button("✅ ENVIAR INSCRIÇÃO AGORA", type="primary", use_container_width
             
             pdf.set_font("Arial", 'B', 24); pdf.set_text_color(255,255,255)
             pdf.set_y(10); pdf.cell(0, 10, nome_time.upper(), 0, 1, 'C')
-            
             pdf.set_font("Arial", '', 10)
             pdf.set_y(22)
             pdf.cell(0, 5, f"Jogadores: {int1} & {int2}", 0, 1, 'C')
@@ -337,26 +393,20 @@ if st.button("✅ ENVIAR INSCRIÇÃO AGORA", type="primary", use_container_width
             def draw_kit_pdf(kit, x_pos, label):
                 if kit['img'] and os.path.exists(kit['img']):
                     pdf.image(kit['img'], x=x_pos, y=5, w=25)
-                
                 pdf.set_xy(x_pos, 32)
                 pdf.set_font("Arial", 'B', 7); pdf.set_text_color(255,255,255)
                 pdf.cell(25, 3, label, 0, 1, 'C')
                 pdf.cell(25, 3, kit['modelo'], 0, 1, 'C')
                 
-                cores_to_draw = [kit['camisa'][0], kit['camisa'][1]]
-                if kit['qtd'] == 3 and kit['camisa'][2]:
-                    cores_to_draw.append(kit['camisa'][2])
-                cores_to_draw.append(kit['calcao'])
-                cores_to_draw.append(kit['meia'])
+                cores = [kit['camisa'][0], kit['camisa'][1]]
+                if kit['qtd'] == 3 and kit['camisa'][2]: cores.append(kit['camisa'][2])
+                cores.append(kit['calcao'])
+                cores.append(kit['meia'])
                 
-                bx = x_pos + 1
+                bx = x_pos + (25 - (len(cores)*4.5))/2
                 by = 40
                 pdf.set_draw_color(255, 255, 255) 
-                
-                largura_total = len(cores_to_draw) * 4.5
-                bx = x_pos + (25 - largura_total)/2
-                
-                for hex_c in cores_to_draw:
+                for hex_c in cores:
                     if hex_c:
                         r, g, b = hex_to_rgb(hex_c)
                         pdf.set_fill_color(r, g, b)
@@ -375,7 +425,6 @@ if st.button("✅ ENVIAR INSCRIÇÃO AGORA", type="primary", use_container_width
                 pdf.cell(0, 6, f"  {titulo}", 0, 1, 'L', fill=True) 
                 pdf.ln(1)
                 pdf.set_font("Arial", '', 8) 
-                
                 soma = 0; qtd = 0
                 for p in lista:
                     if p['T'] == tipo_filtro:
@@ -385,7 +434,6 @@ if st.button("✅ ENVIAR INSCRIÇÃO AGORA", type="primary", use_container_width
                         ov = p.get('OVERALL', 0)
                         try: soma += float(ov); qtd += 1
                         except: pass
-                        
                         pdf.cell(20, 5, p['P'], 0, 0, 'C')
                         pdf.cell(15, 5, str(num), 0, 0, 'C')
                         pdf.cell(125, 5, n, 0, 0, 'L')
