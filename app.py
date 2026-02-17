@@ -51,21 +51,16 @@ st.markdown("""
     /* Remove botões +/- dos inputs numéricos */
     [data-testid="stNumberInput"] button {display: none;}
     [data-testid="stNumberInput"] input {width: 100%;}
-    
-    /* Ajuste de métricas */
     [data-testid="stMetricValue"] {font-size: 1.1rem;}
-    
-    /* Estilo do Expander */
     .streamlit-expanderHeader {background-color: #f0f2f6; border-radius: 5px;}
-    
-    /* Color picker full width */
     div[data-baseweb="color-picker"] {width: 100%;}
     
-    /* CORREÇÃO: Removemos o width:100% global dos botões para eles não ficarem gigantes */
-    /* Apenas estilizamos o padding para ficarem mais compactos */
+    /* Estilo para botão de seleção de uniforme (Compacto) */
     .stButton button {
+        width: 100%;
         border-radius: 5px;
-        padding: 0.2rem 0.8rem; /* Botões mais finos */
+        padding: 0px 5px; /* Remove padding vertical excessivo */
+        height: auto;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -168,17 +163,19 @@ with st.expander("📋 Cadastro & Uniformes (Clique para Fechar/Abrir)", expande
             arquivo = OPCOES_CAMISAS[mod_nome]
             with cols[i % 4]:
                 if os.path.exists(arquivo):
-                    # Width 100 para thumbnail
-                    st.image(arquivo, width=100)
+                    # ALTERADO: Largura para 200px
+                    st.image(arquivo, width=200)
                 else:
                     st.caption(f"Sem img")
                 
                 is_selected = (st.session_state[state_key] == mod_nome)
+                
+                # ALTERADO: Botão "fake" desabilitado para simular o estado selecionado
+                # Mantém o mesmo tamanho do botão de ação
                 if is_selected:
-                    st.success("✅ Selecionado")
+                    st.button("✅ Selecionado", key=f"btn_sel_{key_pfx}_{i}", disabled=True, use_container_width=True)
                 else:
-                    # Botão sem use_container_width=True para ficar pequeno
-                    if st.button("Selecionar", key=f"btn_{key_pfx}_{i}"):
+                    if st.button("Selecionar", key=f"btn_{key_pfx}_{i}", use_container_width=True):
                         st.session_state[state_key] = mod_nome
                         st.rerun()
         
@@ -306,7 +303,6 @@ with c2:
 
 st.markdown("---")
 
-# Botão Limpar com use_container_width (Grande)
 if st.button("🔄 Limpar Escalação", use_container_width=True):
     reset_callback()
     st.rerun()
@@ -314,7 +310,6 @@ if st.button("🔄 Limpar Escalação", use_container_width=True):
 st.markdown("###")
 
 # --- EXPORT ---
-# Botão Enviar com use_container_width (Grande)
 if st.button("✅ ENVIAR INSCRIÇÃO AGORA", type="primary", use_container_width=True):
     if not int1 or not int2 or not email_user: 
         st.error("⚠️ Faltam dados no cadastro (Nome, Email ou Integrantes)!")
@@ -331,6 +326,7 @@ if st.button("✅ ENVIAR INSCRIÇÃO AGORA", type="primary", use_container_width
         pdf = FPDF()
         pdf.add_page()
         
+        # Header (Reduzido)
         pdf.set_fill_color(20,20,20); pdf.rect(0,0,210,50,'F')
         
         if escudo:
