@@ -59,6 +59,7 @@ st.markdown("""
     .stButton button {
         width: 100%;
         border-radius: 5px;
+        padding: 0.2rem 0.5rem;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -150,28 +151,25 @@ with st.expander("📋 Cadastro & Uniformes (Clique para Fechar/Abrir)", expande
     
     def ui_uniforme(tipo_kit):
         key_pfx = f"uni_{tipo_kit.lower()}"
-        state_key = f"uni_{tipo_kit.lower()}_sel" # ex: uni_titular_sel
+        state_key = f"uni_{tipo_kit.lower()}_sel" 
         
         st.write(f"**Escolha o Padrão ({tipo_kit}):**")
         
-        # Grid de Seleção de Imagens
         modelos = list(OPCOES_CAMISAS.keys())
-        cols = st.columns(4) # 4 por linha
+        cols = st.columns(4) 
         
         for i, mod_nome in enumerate(modelos):
             arquivo = OPCOES_CAMISAS[mod_nome]
             with cols[i % 4]:
-                # Exibe Imagem
                 if os.path.exists(arquivo):
-                    st.image(arquivo, use_column_width=True)
+                    # ALTERADO: Largura fixa de 100px para ficar como thumbnail
+                    st.image(arquivo, width=100)
                 else:
-                    st.caption(f"Sem img: {mod_nome}")
+                    st.caption(f"Sem img")
                 
-                # Botão de Seleção
                 is_selected = (st.session_state[state_key] == mod_nome)
-                
                 if is_selected:
-                    st.success("✅ Selecionado")
+                    st.success("✅ Selec.")
                 else:
                     if st.button("Selecionar", key=f"btn_{key_pfx}_{i}"):
                         st.session_state[state_key] = mod_nome
@@ -347,30 +345,24 @@ if st.button("✅ ENVIAR INSCRIÇÃO AGORA", type="primary", use_container_width
         
         # === FUNÇÃO DE DESENHAR KIT ===
         def draw_kit_pdf(kit, x_pos, label):
-            # Imagem do Padrão
             if kit['img'] and os.path.exists(kit['img']):
                 pdf.image(kit['img'], x=x_pos, y=5, w=25)
             
-            # Label (Titular/Reserva)
             pdf.set_xy(x_pos, 32)
             pdf.set_font("Arial", 'B', 7); pdf.set_text_color(255,255,255)
             pdf.cell(25, 3, label, 0, 1, 'C')
             pdf.cell(25, 3, kit['modelo'], 0, 1, 'C')
             
-            # Cores (Blocos)
-            # Ordem: Camisa(1,2,[3]), Calção, Meia
             cores_to_draw = [kit['camisa'][0], kit['camisa'][1]]
             if kit['qtd'] == 3 and kit['camisa'][2]:
                 cores_to_draw.append(kit['camisa'][2])
             cores_to_draw.append(kit['calcao'])
             cores_to_draw.append(kit['meia'])
             
-            # Desenha
             bx = x_pos + 1
             by = 40
-            pdf.set_draw_color(255, 255, 255) # Borda Branca
+            pdf.set_draw_color(255, 255, 255) 
             
-            # Centraliza os blocos
             largura_total = len(cores_to_draw) * 4.5
             bx = x_pos + (25 - largura_total)/2
             
@@ -381,7 +373,6 @@ if st.button("✅ ENVIAR INSCRIÇÃO AGORA", type="primary", use_container_width
                     pdf.rect(bx, by, 4, 4, 'FD')
                     bx += 4.5
 
-        # Renderiza 2 Kits (Posição 150 e 180)
         draw_kit_pdf(kit_titular, 150, "TITULAR")
         draw_kit_pdf(kit_reserva, 180, "RESERVA")
             
