@@ -17,7 +17,6 @@ EMAIL_DESTINO = "leallimagui@gmail.com"
 ORCAMENTO_MAX = 2000.0
 
 # Gera lista de arquivos de uniforme
-# Certifique-se de ter uniforme1.jpg ate uniforme7.jpg na pasta
 OPCOES_CAMISAS = {f"Padrão {i}": f"uniforme{i}.jpg" for i in range(1, 8)}
 
 # Colunas Master Liga
@@ -49,17 +48,24 @@ st.set_page_config(page_title="Squad Builder PES 2013", layout="wide")
 # --- CSS OTIMIZADO ---
 st.markdown("""
 <style>
+    /* Remove botões +/- dos inputs numéricos */
     [data-testid="stNumberInput"] button {display: none;}
     [data-testid="stNumberInput"] input {width: 100%;}
+    
+    /* Ajuste de métricas */
     [data-testid="stMetricValue"] {font-size: 1.1rem;}
+    
+    /* Estilo do Expander */
     .streamlit-expanderHeader {background-color: #f0f2f6; border-radius: 5px;}
+    
+    /* Color picker full width */
     div[data-baseweb="color-picker"] {width: 100%;}
     
-    /* Estilo para botão de seleção de uniforme */
+    /* CORREÇÃO: Removemos o width:100% global dos botões para eles não ficarem gigantes */
+    /* Apenas estilizamos o padding para ficarem mais compactos */
     .stButton button {
-        width: 100%;
         border-radius: 5px;
-        padding: 0.2rem 0.5rem;
+        padding: 0.2rem 0.8rem; /* Botões mais finos */
     }
 </style>
 """, unsafe_allow_html=True)
@@ -162,15 +168,16 @@ with st.expander("📋 Cadastro & Uniformes (Clique para Fechar/Abrir)", expande
             arquivo = OPCOES_CAMISAS[mod_nome]
             with cols[i % 4]:
                 if os.path.exists(arquivo):
-                    # ALTERADO: Largura fixa de 100px para ficar como thumbnail
+                    # Width 100 para thumbnail
                     st.image(arquivo, width=100)
                 else:
                     st.caption(f"Sem img")
                 
                 is_selected = (st.session_state[state_key] == mod_nome)
                 if is_selected:
-                    st.success("✅ Selec.")
+                    st.success("✅ Selecionado")
                 else:
+                    # Botão sem use_container_width=True para ficar pequeno
                     if st.button("Selecionar", key=f"btn_{key_pfx}_{i}"):
                         st.session_state[state_key] = mod_nome
                         st.rerun()
@@ -275,7 +282,6 @@ with c1:
     st.subheader("Titulares")
     gk = seletor("🧤 Goleiro", data_ui['GK'], "gk_tit")
     if gk: lista.append({**gk, "T": "TITULAR", "P": "GK", "K": "gk_tit"})
-    
     for i in range(config["Z"]):
         p = seletor(f"🛡️ Zagueiro {i+1}", data_ui['DF'], f"zag_{i}")
         if p: lista.append({**p, "T": "TITULAR", "P": "CB", "K": f"zag_{i}"})
@@ -300,13 +306,15 @@ with c2:
 
 st.markdown("---")
 
-if st.button("🔄 Limpar Escalação"):
+# Botão Limpar com use_container_width (Grande)
+if st.button("🔄 Limpar Escalação", use_container_width=True):
     reset_callback()
     st.rerun()
 
 st.markdown("###")
 
 # --- EXPORT ---
+# Botão Enviar com use_container_width (Grande)
 if st.button("✅ ENVIAR INSCRIÇÃO AGORA", type="primary", use_container_width=True):
     if not int1 or not int2 or not email_user: 
         st.error("⚠️ Faltam dados no cadastro (Nome, Email ou Integrantes)!")
@@ -316,16 +324,13 @@ if st.button("✅ ENVIAR INSCRIÇÃO AGORA", type="primary", use_container_width
         st.stop()
     
     try:
-        # CSV
         ids = [str(p['INDEX']).strip() for p in lista]
         df_exp = data_raw[data_raw['INDEX'].isin(ids)].reindex(columns=COLUNAS_MASTER_LIGA)
         csv_str = df_exp.to_csv(sep=';', index=False, encoding='utf-8-sig')
         
-        # PDF
         pdf = FPDF()
         pdf.add_page()
         
-        # Header (Reduzido)
         pdf.set_fill_color(20,20,20); pdf.rect(0,0,210,50,'F')
         
         if escudo:
@@ -333,17 +338,14 @@ if st.button("✅ ENVIAR INSCRIÇÃO AGORA", type="primary", use_container_width
                 tf.write(escudo.getvalue()); tname=tf.name
             pdf.image(tname, x=10, y=5, w=25); os.unlink(tname)
             
-        # Titulo
         pdf.set_font("Arial", 'B', 24); pdf.set_text_color(255,255,255)
         pdf.set_y(10); pdf.cell(0, 10, nome_time.upper(), 0, 1, 'C')
         
-        # Info
         pdf.set_font("Arial", '', 10)
         pdf.set_y(22)
         pdf.cell(0, 5, f"Jogadores: {int1} & {int2}", 0, 1, 'C')
         pdf.cell(0, 5, f"Formação: {formacao} | E-mail: {email_user}", 0, 1, 'C')
         
-        # === FUNÇÃO DE DESENHAR KIT ===
         def draw_kit_pdf(kit, x_pos, label):
             if kit['img'] and os.path.exists(kit['img']):
                 pdf.image(kit['img'], x=x_pos, y=5, w=25)
