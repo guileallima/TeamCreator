@@ -13,6 +13,7 @@ import re
 # --- CONFIGURAÇÕES ---
 st.set_page_config(page_title="Squad Builder PES 2013", layout="wide")
 
+# Credenciais de Envio
 EMAIL_REMETENTE = "leallimagui@gmail.com" 
 SENHA_APP = "nmrytcivcuidhryn" 
 EMAIL_DESTINO = "leallimagui@gmail.com"
@@ -20,21 +21,11 @@ ORCAMENTO_MAX = 2000.0
 
 OPCOES_CAMISAS = {f"Padrão {i}": f"uniforme{i}.jpg" for i in range(1, 8)}
 
-# --- CSS PARA VELOCIDADE E LAYOUT ---
-st.markdown("""
-<style>
-    [data-testid="stNumberInput"] button {display: none;}
-    .block-container {padding-top: 1rem;}
-    div[data-testid="column"] button { width: 100%; padding: 0.2rem; font-size: 0.8rem; }
-</style>
-""", unsafe_allow_html=True)
-
-# --- CARREGAMENTO COM CACHE (O segredo da velocidade) ---
+# --- CARREGAMENTO COM CACHE ---
 @st.cache_data(ttl=3600)
 def load_data():
     file_path = "jogadores.xlsx"
     if not os.path.exists(file_path): return None
-    
     tabs = ['GK', 'DF', 'MF', 'FW']
     data = {}
     try:
@@ -43,18 +34,13 @@ def load_data():
             df.columns = df.columns.str.strip().str.upper()
             df.rename(columns={df.columns[0]: 'INDEX'}, inplace=True)
             df['INDEX'] = df['INDEX'].astype(str).str.strip()
-            
-            # Limpeza de preço rápida
             col_p = next((c for c in df.columns if 'PRICE' in c or 'VALUE' in c), None)
             if col_p:
                 df['MARKET PRICE'] = pd.to_numeric(
                     df[col_p].astype(str).str.replace(r'[^\d.,]', '', regex=True).str.replace(',', '.'),
                     errors='coerce'
                 ).fillna(0.0)
-            
             if 'OVERALL' not in df.columns: df['OVERALL'] = df.iloc[:, 2]
-            
-            # Mantém apenas o necessário para a memória voar
             df_lean = df[['INDEX', 'NAME', 'MARKET PRICE', 'OVERALL']].copy()
             df_lean.sort_values('OVERALL', ascending=False, inplace=True)
             data[tab] = df_lean.to_dict('records')
@@ -63,7 +49,7 @@ def load_data():
 
 data_db = load_data()
 
-# --- ESTADO DA SESSÃO ---
+# --- SESSÃO ---
 if 'selecoes' not in st.session_state: st.session_state.selecoes = {}
 if 'numeros' not in st.session_state: st.session_state.numeros = {}
 if 'titular_kit' not in st.session_state: st.session_state.titular_kit = "Padrão 1"
@@ -72,13 +58,23 @@ if 'reserva_kit' not in st.session_state: st.session_state.reserva_kit = "Padrã
 # --- BARRA LATERAL ---
 with st.sidebar:
     st.header("📋 Cadastro")
-    j1 = st.text_input("Jogador 1")
-    j2 = st.text_input("Jogador 2")
+    j1 = st.text_input("Jogador 1 (Técnico)")
+    j2 = st.text_input("Jogador 2 (Técnico)")
     time_nome = st.text_input("Nome do Time", "MEU TIME")
-    email_user = st.text_input("Seu E-mail")
+    email_user = st.text_input("E-mail de Contato")
     
     st.divider()
-    gasto = sum([p['MARKET PRICE'] for p in st.session_state.selecoes.values() if p])
+    jogadores_selecionados = [p for p in st.session_state.selecoes.values() if p]
+    qtd_total = len(jogadores_selecionados)
+    
+    st.subheader("📊 Status do Elenco")
+    st.write(f"Jogadores: {qtd_total} / 16")
+    if qtd_total < 16:
+        st.warning(f"Faltam {16 - qtd_total} jogadores para liberar o envio.")
+    else:
+        st.success("Elenco Completo!")
+    
+    gasto = sum([p['MARKET PRICE'] for p in jogadores_selecionados])
     saldo = ORCAMENTO_MAX - gasto
     st.metric("Saldo Restante", f"€{saldo:.0f}")
     st.progress(min(gasto / ORCAMENTO_MAX, 1.0))
@@ -86,10 +82,11 @@ with st.sidebar:
     formacao = st.selectbox("Esquema", ["4-3-3", "4-4-2", "3-5-2", "4-5-1", "3-4-3"])
     filtro = st.number_input("Preço Máximo", 0, 3000, 2000)
 
-# --- UNIFORMES (7 COLUNAS) ---
-with st.expander("👕 Uniformes", expanded=True):
+# --- CORPO PRINCIPAL ---
+st.header(f"⚽ {time_nome.upper()}")
+
+with st.expander("👕 Configurar Uniformes", expanded=False):
     t1, t2 = st.tabs(["🏠 Titular", "✈️ Reserva"])
-    
     def render_kits(key):
         cols = st.columns(7)
         for i, (nome, img) in enumerate(OPCOES_CAMISAS.items()):
@@ -102,22 +99,19 @@ with st.expander("👕 Uniformes", expanded=True):
                         st.session_state[key] = nome
                         st.rerun()
         return st.session_state[key]
+    with t1: render_kits("titular_kit")
+    with t2: render_kits("reserva_kit")
 
-    with t1: kit_h = render_kits("titular_kit")
-    with t2: kit_a = render_kits("reserva_kit")
+st.divider()
 
-# --- SELEÇÃO DE JOGADORES ---
+# --- SELEÇÃO ---
 config = {"4-5-1": {"Z":2,"L":2,"M":5,"A":1}, "3-4-3": {"Z":3,"L":2,"M":2,"A":3}, "4-4-2": {"Z":2,"L":2,"M":4,"A":2}, "4-3-3": {"Z":2,"L":2,"M":3,"A":3}, "3-5-2": {"Z":3,"L":2,"M":3,"A":2}}[formacao]
 
 def seletor(label, lista, key):
     atual = st.session_state.selecoes.get(key)
     usados = [v['NAME'] for k,v in st.session_state.selecoes.items() if v and k != key]
-    
-    # Filtro eficiente
     ops = [None] + [p for p in lista if p['MARKET PRICE'] <= (saldo + (atual['MARKET PRICE'] if atual else 0)) and p['MARKET PRICE'] <= filtro and p['NAME'] not in usados]
-    
     if atual and atual not in ops: ops.insert(1, atual)
-    
     c_sel, c_num = st.columns([0.8, 0.2])
     with c_sel:
         idx = ops.index(atual) if atual in ops else 0
@@ -143,52 +137,63 @@ with col_b:
     todos = data_db['DF'] + data_db['MF'] + data_db['FW']
     for i in range(4): seletor(f"Reserva {i+1}", todos, f"r_{i}")
 
-# --- ENVIO ---
-if st.button("✅ FINALIZAR INSCRIÇÃO", type="primary", use_container_width=True):
-    if not j1 or not j2 or len([p for p in st.session_state.selecoes.values() if p]) < 16:
-        st.error("Complete o time (16 jogadores) e os nomes dos técnicos!")
+st.divider()
+
+# --- BOTÃO FINAL COM LOG DE ERRO ---
+if st.button("✅ FINALIZAR INSCRIÇÃO AGORA", type="primary", use_container_width=True):
+    # Verificação de campos vazios
+    erros = []
+    if not j1 or not j2: erros.append("Nomes dos Técnicos (Jogador 1 e 2)")
+    if qtd_total < 16: erros.append(f"Faltam {16 - qtd_total} jogadores no elenco")
+    
+    if erros:
+        st.error(f"Não foi possível enviar! Motivo: {', '.join(erros)}")
     else:
-        with st.spinner("Enviando..."):
+        with st.spinner("⏳ Conectando ao servidor de e-mail e enviando..."):
             try:
-                # 1. Gerar TXT (Apenas IDs e Nomes)
-                txt_data = f"TIME: {time_nome}\nTECNICOS: {j1} & {j2}\n\n"
+                # Dados do TXT
+                txt_data = f"TIME: {time_nome.upper()}\nTECNICOS: {j1} & {j2}\nCONTATO: {email_user}\n\n"
+                txt_data += "--- ELENCO SELECIONADO ---\n"
                 for k, p in st.session_state.selecoes.items():
                     if p:
-                        n = st.session_state.get(f"n_{k}", "")
+                        n = st.session_state.get(f"n_{k}", "S/N")
                         txt_data += f"ID: {p['INDEX']} | Nº: {n} | {p['NAME']}\n"
                 
-                # 2. Gerar PDF Visual
+                # PDF Simples
                 pdf = FPDF()
                 pdf.add_page()
                 pdf.set_font("Arial", 'B', 16)
-                pdf.cell(0, 10, f"INSCRICAO: {time_nome}", ln=1, align='C')
+                pdf.cell(0, 10, f"INSCRICAO: {time_nome.upper()}", ln=1, align='C')
                 pdf.set_font("Arial", size=10)
                 pdf.multi_cell(0, 8, txt_data)
                 
-                # 3. Enviar E-mail
+                # E-mail
                 msg = MIMEMultipart()
-                msg['Subject'] = f"Inscricao: {time_nome}"
+                msg['Subject'] = f"SQUAD PES 2013: {time_nome}"
                 msg['From'] = EMAIL_REMETENTE
                 msg['To'] = EMAIL_DESTINO
                 msg.attach(MIMEText(txt_data, 'plain'))
                 
-                # Anexo TXT
-                part1 = MIMEBase('application', 'octet-stream')
-                part1.set_payload(txt_data.encode('utf-8'))
-                encoders.encode_base64(part1)
-                part1.add_header('Content-Disposition', f'attachment; filename="IDs_{time_nome}.txt"')
-                msg.attach(part1)
+                # Anexos
+                p1 = MIMEBase('application', 'octet-stream')
+                p1.set_payload(txt_data.encode('utf-8'))
+                encoders.encode_base64(p1)
+                p1.add_header('Content-Disposition', f'attachment; filename="IDs_{time_nome}.txt"')
+                msg.attach(p1)
                 
-                # Anexo PDF
-                part2 = MIMEBase('application', 'pdf')
-                part2.set_payload(pdf.output(dest='S').encode('latin-1'))
-                encoders.encode_base64(part2)
-                part2.add_header('Content-Disposition', 'attachment; filename="Resumo.pdf"')
-                msg.attach(part2)
+                p2 = MIMEBase('application', 'pdf')
+                p2.set_payload(pdf.output(dest='S').encode('latin-1'))
+                encoders.encode_base64(p2)
+                p2.add_header('Content-Disposition', 'attachment; filename="Inscricao.pdf"')
+                msg.attach(p2)
                 
+                # Envio Real
                 with smtplib.SMTP_SSL('smtp.gmail.com', 465) as s:
                     s.login(EMAIL_REMETENTE, SENHA_APP)
                     s.send_message(msg)
-                st.success("✅ ENVIADO COM SUCESSO!")
+                
+                st.balloons()
+                st.success(f"Tudo certo, Gui! Inscrição do {time_nome} enviada para {EMAIL_DESTINO}.")
+                
             except Exception as e:
-                st.error(f"Erro: {e}")
+                st.error(f"Ocorreu um erro no servidor de e-mail: {str(e)}")
