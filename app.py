@@ -51,17 +51,36 @@ st.markdown("""
     /* Remove botões +/- dos inputs numéricos */
     [data-testid="stNumberInput"] button {display: none;}
     [data-testid="stNumberInput"] input {width: 100%;}
+    
+    /* Ajuste de métricas */
     [data-testid="stMetricValue"] {font-size: 1.1rem;}
+    
+    /* Estilo do Expander */
     .streamlit-expanderHeader {background-color: #f0f2f6; border-radius: 5px;}
+    
+    /* Color picker full width */
     div[data-baseweb="color-picker"] {width: 100%;}
     
-    /* REGRA ESPECIAL: Botões dentro do Expander (Uniformes) tem largura fixa de 200px */
+    /* CSS para Botões de Uniforme (200px fixo) */
     .streamlit-expanderContent .stButton button {
         width: 200px !important;
         border-radius: 5px;
         padding: 0px 5px;
-        margin: 0 auto; /* Centraliza se possível */
+        margin: 0 auto; 
         display: block;
+    }
+    
+    /* --- REDUÇÃO DE ESPAÇOS (GAP ~10px) --- */
+    
+    /* Reduz o gap padrão entre colunas horizontais */
+    [data-testid="stHorizontalBlock"] {
+        gap: 10px !important;
+    }
+    
+    /* Reduz o padding lateral dentro de cada coluna para aproximar os elementos */
+    [data-testid="column"] {
+        padding-left: 5px !important;
+        padding-right: 5px !important;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -158,7 +177,8 @@ with st.expander("📋 Cadastro & Uniformes (Clique para Fechar/Abrir)", expande
         st.write(f"**Escolha o Padrão ({tipo_kit}):**")
         
         modelos = list(OPCOES_CAMISAS.keys())
-        cols = st.columns(4) 
+        # GAP SMALL + CSS acima garantem aprox 10px
+        cols = st.columns(4, gap="small") 
         
         for i, mod_nome in enumerate(modelos):
             arquivo = OPCOES_CAMISAS[mod_nome]
