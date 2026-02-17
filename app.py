@@ -16,22 +16,9 @@ SENHA_APP = "nmrytcivcuidhryn"
 EMAIL_DESTINO = "leallimagui@gmail.com"
 ORCAMENTO_MAX = 2000.0
 
-# Dicionário de Cores
-MAPA_CORES = {
-    "Preto": (0, 0, 0), "Branco": (255, 255, 255), "Cinza": (128, 128, 128),
-    "Vermelho": (200, 0, 0), "Azul Escuro": (0, 0, 139), "Azul Claro": (135, 206, 235),
-    "Verde": (0, 128, 0), "Amarelo": (255, 215, 0), "Laranja": (255, 165, 0),
-    "Roxo": (128, 0, 128), "Rosa": (255, 192, 203), "Dourado": (218, 165, 32),
-    "Prata": (192, 192, 192), "Vinho": (114, 47, 55)
-}
-
-# Configuração das Camisas
-OPCOES_CAMISAS = {
-    "Modelo 1": "camisa1.png",
-    "Modelo 2": "camisa2.png",
-    "Modelo 3": "camisa3.png",
-    "Modelo 4": "camisa4.png"
-}
+# Gera lista de arquivos de uniforme (uniforme1.jpg até uniforme7.jpg)
+# CERTIFIQUE-SE QUE AS IMAGENS EXISTEM NA PASTA
+OPCOES_CAMISAS = {f"Padrão {i}": f"uniforme{i}.jpg" for i in range(1, 8)}
 
 # Colunas Master Liga
 COLUNAS_MASTER_LIGA = [
@@ -62,16 +49,16 @@ st.set_page_config(page_title="Squad Builder PES 2013", layout="wide")
 # --- CSS OTIMIZADO ---
 st.markdown("""
 <style>
-    /* Remove botões +/- dos inputs numéricos */
     [data-testid="stNumberInput"] button {display: none;}
     [data-testid="stNumberInput"] input {width: 100%;}
-    /* Ajuste de metricas para mobile */
     [data-testid="stMetricValue"] {font-size: 1.1rem;}
-    /* Expander com fundo leve para destacar */
     .streamlit-expanderHeader {background-color: #f0f2f6; border-radius: 5px;}
+    /* Ajuste para color picker ficar compacto */
+    div[data-baseweb="color-picker"] {width: 100%;}
 </style>
 """, unsafe_allow_html=True)
 
+# --- FUNÇÕES UTILITÁRIAS ---
 def clean_price(val):
     if pd.isna(val) or val == '': return 0.0
     s_val = str(val)
@@ -81,10 +68,13 @@ def clean_price(val):
     try: return float(s_val)
     except: return 0.0
 
+def hex_to_rgb(hex_color):
+    hex_color = hex_color.lstrip('#')
+    return tuple(int(hex_color[i:i+2], 16) for i in (0, 2, 4))
+
 @st.cache_data
 def load_data():
     try:
-        # UI
         file_ui = "jogadores.xlsx"
         tabs = ['GK', 'DF', 'MF', 'FW']
         data_ui = {}
@@ -102,7 +92,6 @@ def load_data():
             else: df['MARKET PRICE'] = 0.0
             data_ui[tab] = df
 
-        # RAW
         file_raw = "jogadoresdata.xlsx"
         df_raw = pd.read_excel(file_raw)
         df_raw.columns = df_raw.columns.str.strip().str.upper()
@@ -133,9 +122,8 @@ saldo = ORCAMENTO_MAX - custo_total
 # --- TÍTULO ---
 st.title("⚽ SQUAD BUILDER")
 
-# --- BLOCO DE CADASTRO (MOBILE FRIENDLY) ---
-with st.expander("📋 Cadastro & Personalização (Clique para Fechar/Abrir)", expanded=True):
-    # Dados Pessoais
+# --- BLOCO DE CADASTRO ---
+with st.expander("📋 Cadastro & Uniformes (Clique para Fechar/Abrir)", expanded=True):
     c_int1, c_int2 = st.columns(2)
     int1 = c_int1.text_input("Jogador 1", key="input_int1")
     int2 = c_int2.text_input("Jogador 2", key="input_int2")
@@ -147,27 +135,61 @@ with st.expander("📋 Cadastro & Personalização (Clique para Fechar/Abrir)", 
     escudo = st.file_uploader("Upload do Escudo", type=['png','jpg'], key="input_logo")
     
     st.markdown("---")
-    st.write("**Uniforme**")
+    st.subheader("👕 Personalização dos Uniformes")
     
-    # Camisas
-    cols_cam = st.columns(4)
-    for i, (nome_mod, arquivo) in enumerate(OPCOES_CAMISAS.items()):
-        with cols_cam[i % 4]:
-            if os.path.exists(arquivo):
-                st.image(arquivo, use_column_width=True)
-            else:
-                st.write(f"🚫 {nome_mod}")
+    # Abas para Titular e Reserva
+    tab_titular, tab_reserva = st.tabs(["🏠 Uniforme Titular", "✈️ Uniforme Reserva"])
+    
+    # Função para gerar UI de Uniforme
+    def ui_uniforme(tipo_kit):
+        key_pfx = f"uni_{tipo_kit}"
+        
+        st.write(f"**Padrão do Uniforme ({tipo_kit})**")
+        # Visualizador de Padrões
+        cols_cam = st.columns(7) # 7 modelos
+        for i, (nome_mod, arquivo) in enumerate(OPCOES_CAMISAS.items()):
+            with cols_cam[i]:
+                if os.path.exists(arquivo):
+                    st.image(arquivo, use_column_width=True)
+                else:
+                    st.caption(f"img?")
+        
+        modelo = st.radio(f"Padrão Selecionado ({tipo_kit}):", list(OPCOES_CAMISAS.keys()), horizontal=True, key=f"{key_pfx}_modelo")
+        
+        st.write(f"**Cores ({tipo_kit})**")
+        qtd_cores = st.radio(f"Nº Cores ({tipo_kit})", [2, 3], horizontal=True, key=f"{key_pfx}_qtd")
+        
+        c1, c2, c3 = st.columns(3)
+        with c1:
+            st.caption("Camisa")
+            cor_camisa_p = st.color_picker("Principal", "#FF0000", key=f"{key_pfx}_cp")
+            cor_camisa_s = st.color_picker("Secundária", "#FFFFFF", key=f"{key_pfx}_cs")
+            cor_camisa_e = None
+            if qtd_cores == 3:
+                cor_camisa_e = st.color_picker("Complem.", "#000000", key=f"{key_pfx}_ce")
                 
-    modelo_camisa = st.radio("Escolha o Modelo:", list(OPCOES_CAMISAS.keys()), horizontal=True, key="input_shirt_model")
-    
-    # Cores
-    c_opt, c_cor1, c_cor2, c_cor3 = st.columns([1, 1, 1, 1])
-    qtd_cores = c_opt.radio("Qtd.", [2, 3], key="input_num_colors")
-    cor1 = c_cor1.selectbox("Principal", list(MAPA_CORES.keys()), index=1, key="input_c1")
-    cor2 = c_cor2.selectbox("Detalhe", list(MAPA_CORES.keys()), index=0, key="input_c2")
-    cor3 = None
-    if qtd_cores == 3:
-        cor3 = c_cor3.selectbox("Extra", list(MAPA_CORES.keys()), index=2, key="input_c3")
+        with c2:
+            st.caption("Calção")
+            cor_calcao = st.color_picker("Cor Calção", "#FFFFFF", key=f"{key_pfx}_cc")
+            
+        with c3:
+            st.caption("Meias")
+            cor_meia = st.color_picker("Cor Meias", "#FFFFFF", key=f"{key_pfx}_cm")
+            
+        return {
+            "modelo": modelo,
+            "img": OPCOES_CAMISAS[modelo],
+            "qtd": qtd_cores,
+            "camisa": [cor_camisa_p, cor_camisa_s, cor_camisa_e],
+            "calcao": cor_calcao,
+            "meia": cor_meia
+        }
+
+    with tab_titular:
+        kit_titular = ui_uniforme("Titular")
+        
+    with tab_reserva:
+        kit_reserva = ui_uniforme("Reserva")
 
 st.markdown("---")
 
@@ -190,7 +212,7 @@ with c_fin:
 
 st.markdown("---")
 
-# --- SELEÇÃO DE JOGADORES ---
+# --- SELEÇÃO ---
 config = {"4-5-1": {"Z":2,"L":2,"M":5,"A":1}, "3-4-3": {"Z":3,"L":2,"M":2,"A":3}, "4-4-2": {"Z":2,"L":2,"M":4,"A":2}, "4-3-3": {"Z":2,"L":2,"M":3,"A":3}, "3-5-2": {"Z":3,"L":2,"M":3,"A":2}}[formacao]
 
 def format_func(row):
@@ -234,7 +256,6 @@ with c1:
     st.subheader("Titulares")
     gk = seletor("🧤 Goleiro", data_ui['GK'], "gk_tit")
     if gk: lista.append({**gk, "T": "TITULAR", "P": "GK", "K": "gk_tit"})
-    
     for i in range(config["Z"]):
         p = seletor(f"🛡️ Zagueiro {i+1}", data_ui['DF'], f"zag_{i}")
         if p: lista.append({**p, "T": "TITULAR", "P": "CB", "K": f"zag_{i}"})
@@ -284,48 +305,61 @@ if st.button("✅ ENVIAR INSCRIÇÃO AGORA", type="primary", use_container_width
         pdf = FPDF()
         pdf.add_page()
         
-        # Header (Reduzido para 45mm)
-        pdf.set_fill_color(20,20,20); pdf.rect(0,0,210,45,'F')
+        # Header (Reduzido para 50mm para caber 2 uniformes)
+        pdf.set_fill_color(20,20,20); pdf.rect(0,0,210,50,'F')
         
         if escudo:
             with tempfile.NamedTemporaryFile(delete=False, suffix=".png") as tf:
                 tf.write(escudo.getvalue()); tname=tf.name
             pdf.image(tname, x=10, y=5, w=25); os.unlink(tname)
             
-        arquivo_camisa = OPCOES_CAMISAS.get(modelo_camisa)
-        if arquivo_camisa and os.path.exists(arquivo_camisa):
-            pdf.image(arquivo_camisa, x=170, y=5, w=30)
-        
+        # Funcao para desenhar kit no PDF
+        def draw_kit_pdf(kit_data, x_pos, label):
+            # Imagem do Padrão
+            if kit_data['img'] and os.path.exists(kit_data['img']):
+                pdf.image(kit_data['img'], x=x_pos, y=5, w=25)
+            
+            # Texto (Home/Away)
+            pdf.set_xy(x_pos, 32)
+            pdf.set_font("Arial", 'B', 8); pdf.set_text_color(255,255,255)
+            pdf.cell(25, 4, label, 0, 1, 'C')
+            
+            # Cores (Blocos)
+            # Ordem: Camisa(1,2,[3]), Calção, Meia
+            cores_to_draw = [kit_data['camisa'][0], kit_data['camisa'][1]]
+            if kit_data['qtd'] == 3 and kit_data['camisa'][2]:
+                cores_to_draw.append(kit_data['camisa'][2])
+            cores_to_draw.append(kit_data['calcao'])
+            cores_to_draw.append(kit_data['meia'])
+            
+            # Desenha
+            bx = x_pos + 1
+            by = 37
+            pdf.set_draw_color(255, 255, 255) # Borda Branca
+            for hex_c in cores_to_draw:
+                if hex_c:
+                    r, g, b = hex_to_rgb(hex_c)
+                    pdf.set_fill_color(r, g, b)
+                    pdf.rect(bx, by, 4, 4, 'FD')
+                    bx += 4.5
+
+        # Desenha Kit Titular (Esq) e Reserva (Dir)
+        # Ajustando posição central do texto
         pdf.set_font("Arial", 'B', 24); pdf.set_text_color(255,255,255)
         pdf.set_y(10); pdf.cell(0, 10, nome_time.upper(), 0, 1, 'C')
         
-        pdf.set_font("Arial", '', 10)
+        pdf.set_font("Arial", '', 9)
         pdf.set_y(22)
-        pdf.cell(0, 5, f"Jogadores: {int1} & {int2}", 0, 1, 'C')
-        pdf.cell(0, 5, f"Formação: {formacao} | E-mail: {email_user}", 0, 1, 'C')
+        pdf.cell(0, 4, f"Jogadores: {int1} & {int2}", 0, 1, 'C')
+        pdf.cell(0, 4, f"Formação: {formacao} | E-mail: {email_user}", 0, 1, 'C')
         
-        # Uniforme e Cores (Ajustado)
-        pdf.cell(0, 5, f"Uniforme: {modelo_camisa}", 0, 1, 'C')
-        
-        # Desenha cores logo abaixo do texto (com borda branca para contraste)
-        y_cores = pdf.get_y() + 1 # +1mm de respiro
-        cores_escolhidas = [cor1, cor2]
-        if qtd_cores == 3: cores_escolhidas.append(cor3)
-        
-        largura_blocos = len(cores_escolhidas) * 7
-        x_start = (210 - largura_blocos) / 2
-        
-        # Cor da borda: Branca
-        pdf.set_draw_color(255, 255, 255)
-        
-        for c_nome in cores_escolhidas:
-            rgb = MAPA_CORES.get(c_nome, (255,255,255))
-            pdf.set_fill_color(*rgb)
-            # 'FD' = Preenchimento + Borda
-            pdf.rect(x_start, y_cores, 5, 5, 'FD')
-            x_start += 7
+        # Renderiza Kits (Esq do centro e Dir do centro)
+        # Vamos por Titular na Esquerda (pos 150) e Reserva na Direita (pos 180)?? Não, header ta cheio
+        # Vamos colocar: Escudo (10), Time (Centro), Titular (150), Reserva (180)
+        draw_kit_pdf(kit_titular, 150, "TITULAR")
+        draw_kit_pdf(kit_reserva, 180, "RESERVA")
             
-        pdf.set_y(47) # Começa o conteúdo logo após o header
+        pdf.set_y(52) # Conteúdo começa aqui
         pdf.set_text_color(0,0,0)
         
         def print_tabela(titulo, tipo_filtro):
@@ -333,7 +367,6 @@ if st.button("✅ ENVIAR INSCRIÇÃO AGORA", type="primary", use_container_width
             pdf.set_font("Arial", 'B', 10) 
             pdf.cell(0, 6, f"  {titulo}", 0, 1, 'L', fill=True) 
             pdf.ln(1)
-            # FONTE 8
             pdf.set_font("Arial", '', 8) 
             
             soma = 0; qtd = 0
@@ -347,16 +380,13 @@ if st.button("✅ ENVIAR INSCRIÇÃO AGORA", type="primary", use_container_width
                     try: soma += float(ov); qtd += 1
                     except: pass
                     
-                    # LINHA COMPACTA (5mm)
                     pdf.cell(20, 5, p['P'], 0, 0, 'C')
                     pdf.cell(15, 5, str(num), 0, 0, 'C')
                     pdf.cell(125, 5, n, 0, 0, 'L')
                     pdf.set_font("Arial", 'B', 8)
                     pdf.cell(30, 5, str(ov), 0, 1, 'C')
                     pdf.set_font("Arial", '', 8)
-                    # Reseta cor da borda para cinza suave nas tabelas
-                    pdf.set_draw_color(220,220,220)
-                    pdf.line(10, pdf.get_y(), 200, pdf.get_y())
+                    pdf.set_draw_color(220,220,220); pdf.line(10, pdf.get_y(), 200, pdf.get_y())
                     pdf.ln(5) 
             return soma, qtd
 
@@ -373,7 +403,7 @@ if st.button("✅ ENVIAR INSCRIÇÃO AGORA", type="primary", use_container_width
         msg = MIMEMultipart()
         msg['From'], msg['To'] = EMAIL_REMETENTE, EMAIL_DESTINO
         msg['Subject'] = f"Inscrição: {nome_time}"
-        msg.attach(MIMEText(f"Time: {nome_time}\nCamisa: {modelo_camisa}", 'plain'))
+        msg.attach(MIMEText(f"Time: {nome_time}\nUniforme Titular: {kit_titular['modelo']}\nUniforme Reserva: {kit_reserva['modelo']}", 'plain'))
         
         files = [('Escalacao.pdf', pdf.output(dest='S').encode('latin-1'), 'application/pdf'),
                  (f'Master_{nome_time}.csv', csv_str.encode('utf-8-sig'), 'text/csv')]
