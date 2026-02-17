@@ -11,6 +11,8 @@ import os
 import re
 
 # --- CONFIGURAÇÕES GERAIS ---
+# ATENÇÃO: Para funcionar, você precisa gerar uma "Senha de App" na sua conta Google
+# Não use a senha normal do seu e-mail.
 EMAIL_REMETENTE = "leallimagui@gmail.com" 
 SENHA_APP = "nmrytcivcuidhryn" 
 EMAIL_DESTINO = "leallimagui@gmail.com"
@@ -45,37 +47,24 @@ COLUNAS_MASTER_LIGA = [
 
 st.set_page_config(page_title="Squad Builder PES 2013", layout="wide")
 
-# --- CSS OTIMIZADO (GAP 10px e Botoes Compactos) ---
+# --- CSS OTIMIZADO ---
 st.markdown("""
 <style>
-    /* Remove botões +/- dos inputs numéricos */
     [data-testid="stNumberInput"] button {display: none;}
     [data-testid="stNumberInput"] input {width: 100%;}
     [data-testid="stMetricValue"] {font-size: 1.1rem;}
     .streamlit-expanderHeader {background-color: #f0f2f6; border-radius: 5px;}
     div[data-baseweb="color-picker"] {width: 100%;}
     
-    /* ESPAÇAMENTO ENTRE COLUNAS (GAP 10px) */
-    [data-testid="stHorizontalBlock"] {
-        gap: 10px !important;
-    }
-    [data-testid="column"] {
-        padding: 0 !important; /* Remove padding extra para caber tudo */
-        min-width: 0 !important;
-    }
+    [data-testid="stHorizontalBlock"] {gap: 10px !important;}
+    [data-testid="column"] {padding: 0 !important; min-width: 0 !important;}
     
-    /* BOTÕES DENTRO DO EXPANDER (SELEÇÃO) */
     .streamlit-expanderContent .stButton button {
-        width: 100% !important; /* Ocupa a largura da coluna (thumbnail) */
-        border-radius: 4px;
-        padding: 2px 0px !important; /* Padding mínimo */
-        font-size: 0.8rem; /* Fonte levemente menor para caber */
-        margin-top: -10px; /* Puxa pra perto da imagem */
-    }
-    
-    /* Imagens dentro das colunas */
-    [data-testid="stImage"] {
-        margin-bottom: 5px; /* Espaço pequeno entre img e botão */
+        width: 200px !important;
+        border-radius: 5px;
+        padding: 0px 5px;
+        margin: 0 auto; 
+        display: block;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -169,29 +158,22 @@ with st.expander("📋 Cadastro & Uniformes (Clique para Fechar/Abrir)", expande
         state_key = f"uni_{tipo_kit.lower()}_sel" 
         
         st.write(f"**Escolha o Padrão ({tipo_kit}):**")
-        
         modelos = list(OPCOES_CAMISAS.keys())
-        
-        # AQUI ESTÁ A MUDANÇA: st.columns(7) PARA FORÇAR 7 NA LINHA
         cols = st.columns(7) 
         
         for i, mod_nome in enumerate(modelos):
             arquivo = OPCOES_CAMISAS[mod_nome]
-            with cols[i]: # Usa as 7 colunas sequencialmente
+            with cols[i]:
                 if os.path.exists(arquivo):
-                    # use_column_width=True aqui faz a imagem preencher a coluna (que é estreita)
-                    # Se a tela for grande, fica ~200px. Se pequena, reduz.
-                    st.image(arquivo, use_column_width=True)
+                    st.image(arquivo, width=200)
                 else:
                     st.caption(f"Sem img")
                 
                 is_selected = (st.session_state[state_key] == mod_nome)
-                
-                # Botões ocupam 100% da largura da coluna
                 if is_selected:
-                    st.button("✅", key=f"btn_sel_{key_pfx}_{i}", disabled=True)
+                    st.button("✅ Selecionado", key=f"btn_sel_{key_pfx}_{i}", disabled=True)
                 else:
-                    if st.button("Usar", key=f"btn_{key_pfx}_{i}"):
+                    if st.button("Selecionar", key=f"btn_{key_pfx}_{i}"):
                         st.session_state[state_key] = mod_nome
                         st.rerun()
         
@@ -227,7 +209,6 @@ with st.expander("📋 Cadastro & Uniformes (Clique para Fechar/Abrir)", expande
 
     with tab_titular:
         kit_titular = ui_uniforme("Titular")
-        
     with tab_reserva:
         kit_reserva = ui_uniforme("Reserva")
 
@@ -235,13 +216,10 @@ st.markdown("---")
 
 # --- PAINEL DE CONTROLE ---
 c_fmt, c_filt, c_fin = st.columns([1, 1, 1.5])
-
 with c_fmt:
     formacao = st.selectbox("Esquema Tático", ["4-5-1", "3-4-3", "4-4-2", "4-3-3", "3-5-2"], key="input_fmt")
-
 with c_filt:
     filtro_p = st.number_input("Valor Limite por Jogador (€)", 0.0, 3000.0, 2000.0, 10.0, key="input_filter")
-
 with c_fin:
     percentual_gasto = min(custo_total / ORCAMENTO_MAX, 1.0)
     m1, m2 = st.columns(2)
@@ -262,19 +240,16 @@ def seletor(label, df, key):
     escolha = st.session_state.escolhas.get(key)
     val_atual = escolha.get('MARKET PRICE', 0.0) if escolha else 0.0
     usados = [v['NAME'] for k,v in st.session_state.escolhas.items() if v and k != key]
-    
     mask = (df['MARKET PRICE'] <= (saldo + val_atual)) & (df['MARKET PRICE'] <= filtro_p) & (~df['NAME'].isin(usados))
     df_f = df[mask]
     col_ov = 'OVERALL' if 'OVERALL' in df.columns else df.columns[2]
     ops = [None] + df_f.sort_values(col_ov, ascending=False).to_dict('records')
-    
     if escolha and escolha['NAME'] not in [o['NAME'] for o in ops if o]: ops.insert(1, escolha)
-    
     idx = 0
     if escolha:
         for i, o in enumerate(ops): 
             if o and o['NAME'] == escolha['NAME']: idx = i; break
-            
+    
     c_sel, c_num = st.columns([4, 1.2]) 
     with c_sel:
         new_sel = st.selectbox(label, ops, index=idx, format_func=format_func, key=f"s_{key}_{st.session_state.form_id}")
@@ -282,7 +257,6 @@ def seletor(label, df, key):
         val_n = st.session_state.numeros.get(key, "")
         new_n = st.text_input("Nº", value=val_n, max_chars=2, key=f"n_{key}_{st.session_state.form_id}")
         st.session_state.numeros[key] = new_n
-        
     if new_sel != escolha:
         st.session_state.escolhas[key] = new_sel
         st.rerun()
@@ -318,137 +292,141 @@ with c2:
         if p: lista.append({**p, "T": "RESERVA", "P": "RES", "K": f"res_{i}"})
 
 st.markdown("---")
-
 if st.button("🔄 Limpar Escalação", use_container_width=True):
     reset_callback()
     st.rerun()
-
 st.markdown("###")
 
 # --- EXPORT ---
 if st.button("✅ ENVIAR INSCRIÇÃO AGORA", type="primary", use_container_width=True):
-    if not int1 or not int2 or not email_user: 
-        st.error("⚠️ Faltam dados no cadastro (Nome, Email ou Integrantes)!")
-        st.stop()
-    if len(lista) < 16: 
-        st.warning(f"⚠️ Complete o time! Faltam {16 - len(lista)} jogadores.")
+    # VALIDAÇÃO CRÍTICA
+    erros = []
+    if not int1: erros.append("Falta o Jogador 1")
+    if not int2: erros.append("Falta o Jogador 2")
+    if not email_user: erros.append("Falta o E-mail")
+    if len(lista) < 16: erros.append(f"Faltam {16 - len(lista)} jogadores")
+    
+    if erros:
+        st.error(f"⚠️ ERRO DE PREENCHIMENTO: {', '.join(erros)}")
         st.stop()
     
-    try:
-        ids = [str(p['INDEX']).strip() for p in lista]
-        df_exp = data_raw[data_raw['INDEX'].isin(ids)].reindex(columns=COLUNAS_MASTER_LIGA)
-        csv_str = df_exp.to_csv(sep=';', index=False, encoding='utf-8-sig')
-        
-        pdf = FPDF()
-        pdf.add_page()
-        
-        # Header (Reduzido)
-        pdf.set_fill_color(20,20,20); pdf.rect(0,0,210,50,'F')
-        
-        if escudo:
-            with tempfile.NamedTemporaryFile(delete=False, suffix=".png") as tf:
-                tf.write(escudo.getvalue()); tname=tf.name
-            pdf.image(tname, x=10, y=5, w=25); os.unlink(tname)
+    with st.spinner("⏳ Gerando arquivos e enviando e-mail... Aguarde!"):
+        try:
+            ids = [str(p['INDEX']).strip() for p in lista]
+            df_exp = data_raw[data_raw['INDEX'].isin(ids)].reindex(columns=COLUNAS_MASTER_LIGA)
+            csv_str = df_exp.to_csv(sep=';', index=False, encoding='utf-8-sig')
             
-        pdf.set_font("Arial", 'B', 24); pdf.set_text_color(255,255,255)
-        pdf.set_y(10); pdf.cell(0, 10, nome_time.upper(), 0, 1, 'C')
-        
-        pdf.set_font("Arial", '', 10)
-        pdf.set_y(22)
-        pdf.cell(0, 5, f"Jogadores: {int1} & {int2}", 0, 1, 'C')
-        pdf.cell(0, 5, f"Formação: {formacao} | E-mail: {email_user}", 0, 1, 'C')
-        
-        def draw_kit_pdf(kit, x_pos, label):
-            if kit['img'] and os.path.exists(kit['img']):
-                pdf.image(kit['img'], x=x_pos, y=5, w=25)
+            pdf = FPDF()
+            pdf.add_page()
             
-            pdf.set_xy(x_pos, 32)
-            pdf.set_font("Arial", 'B', 7); pdf.set_text_color(255,255,255)
-            pdf.cell(25, 3, label, 0, 1, 'C')
-            pdf.cell(25, 3, kit['modelo'], 0, 1, 'C')
+            # Header (Reduzido)
+            pdf.set_fill_color(20,20,20); pdf.rect(0,0,210,50,'F')
+            if escudo:
+                with tempfile.NamedTemporaryFile(delete=False, suffix=".png") as tf:
+                    tf.write(escudo.getvalue()); tname=tf.name
+                pdf.image(tname, x=10, y=5, w=25); os.unlink(tname)
             
-            cores_to_draw = [kit['camisa'][0], kit['camisa'][1]]
-            if kit['qtd'] == 3 and kit['camisa'][2]:
-                cores_to_draw.append(kit['camisa'][2])
-            cores_to_draw.append(kit['calcao'])
-            cores_to_draw.append(kit['meia'])
+            pdf.set_font("Arial", 'B', 24); pdf.set_text_color(255,255,255)
+            pdf.set_y(10); pdf.cell(0, 10, nome_time.upper(), 0, 1, 'C')
             
-            bx = x_pos + 1
-            by = 40
-            pdf.set_draw_color(255, 255, 255) 
+            pdf.set_font("Arial", '', 10)
+            pdf.set_y(22)
+            pdf.cell(0, 5, f"Jogadores: {int1} & {int2}", 0, 1, 'C')
+            pdf.cell(0, 5, f"Formação: {formacao} | E-mail: {email_user}", 0, 1, 'C')
             
-            largura_total = len(cores_to_draw) * 4.5
-            bx = x_pos + (25 - largura_total)/2
-            
-            for hex_c in cores_to_draw:
-                if hex_c:
-                    r, g, b = hex_to_rgb(hex_c)
-                    pdf.set_fill_color(r, g, b)
-                    pdf.rect(bx, by, 4, 4, 'FD')
-                    bx += 4.5
+            def draw_kit_pdf(kit, x_pos, label):
+                if kit['img'] and os.path.exists(kit['img']):
+                    pdf.image(kit['img'], x=x_pos, y=5, w=25)
+                
+                pdf.set_xy(x_pos, 32)
+                pdf.set_font("Arial", 'B', 7); pdf.set_text_color(255,255,255)
+                pdf.cell(25, 3, label, 0, 1, 'C')
+                pdf.cell(25, 3, kit['modelo'], 0, 1, 'C')
+                
+                cores_to_draw = [kit['camisa'][0], kit['camisa'][1]]
+                if kit['qtd'] == 3 and kit['camisa'][2]:
+                    cores_to_draw.append(kit['camisa'][2])
+                cores_to_draw.append(kit['calcao'])
+                cores_to_draw.append(kit['meia'])
+                
+                bx = x_pos + 1
+                by = 40
+                pdf.set_draw_color(255, 255, 255) 
+                
+                largura_total = len(cores_to_draw) * 4.5
+                bx = x_pos + (25 - largura_total)/2
+                
+                for hex_c in cores_to_draw:
+                    if hex_c:
+                        r, g, b = hex_to_rgb(hex_c)
+                        pdf.set_fill_color(r, g, b)
+                        pdf.rect(bx, by, 4, 4, 'FD')
+                        bx += 4.5
 
-        draw_kit_pdf(kit_titular, 150, "TITULAR")
-        draw_kit_pdf(kit_reserva, 180, "RESERVA")
+            draw_kit_pdf(kit_titular, 150, "TITULAR")
+            draw_kit_pdf(kit_reserva, 180, "RESERVA")
+                
+            pdf.set_y(52) 
+            pdf.set_text_color(0,0,0)
             
-        pdf.set_y(52) 
-        pdf.set_text_color(0,0,0)
-        
-        def print_tabela(titulo, tipo_filtro):
-            pdf.set_fill_color(220, 220, 220)
-            pdf.set_font("Arial", 'B', 10) 
-            pdf.cell(0, 6, f"  {titulo}", 0, 1, 'L', fill=True) 
-            pdf.ln(1)
-            pdf.set_font("Arial", '', 8) 
+            def print_tabela(titulo, tipo_filtro):
+                pdf.set_fill_color(220, 220, 220)
+                pdf.set_font("Arial", 'B', 10) 
+                pdf.cell(0, 6, f"  {titulo}", 0, 1, 'L', fill=True) 
+                pdf.ln(1)
+                pdf.set_font("Arial", '', 8) 
+                
+                soma = 0; qtd = 0
+                for p in lista:
+                    if p['T'] == tipo_filtro:
+                        n = str(p.get('NAME','')).encode('latin-1','ignore').decode('latin-1')
+                        raw_num = st.session_state.numeros.get(p['K'], "")
+                        num = int(raw_num) if raw_num.isdigit() else ""
+                        ov = p.get('OVERALL', 0)
+                        try: soma += float(ov); qtd += 1
+                        except: pass
+                        
+                        pdf.cell(20, 5, p['P'], 0, 0, 'C')
+                        pdf.cell(15, 5, str(num), 0, 0, 'C')
+                        pdf.cell(125, 5, n, 0, 0, 'L')
+                        pdf.set_font("Arial", 'B', 8)
+                        pdf.cell(30, 5, str(ov), 0, 1, 'C')
+                        pdf.set_font("Arial", '', 8)
+                        pdf.set_draw_color(220,220,220); pdf.line(10, pdf.get_y(), 200, pdf.get_y())
+                        pdf.ln(5) 
+                return soma, qtd
+
+            s_tit, q_tit = print_tabela("ELENCO TITULAR", "TITULAR")
+            pdf.ln(2) 
+            print_tabela("BANCO DE RESERVAS", "RESERVA")
             
-            soma = 0; qtd = 0
-            for p in lista:
-                if p['T'] == tipo_filtro:
-                    n = str(p.get('NAME','')).encode('latin-1','ignore').decode('latin-1')
-                    raw_num = st.session_state.numeros.get(p['K'], "")
-                    num = int(raw_num) if raw_num.isdigit() else ""
-                    ov = p.get('OVERALL', 0)
-                    try: soma += float(ov); qtd += 1
-                    except: pass
-                    
-                    pdf.cell(20, 5, p['P'], 0, 0, 'C')
-                    pdf.cell(15, 5, str(num), 0, 0, 'C')
-                    pdf.cell(125, 5, n, 0, 0, 'L')
-                    pdf.set_font("Arial", 'B', 8)
-                    pdf.cell(30, 5, str(ov), 0, 1, 'C')
-                    pdf.set_font("Arial", '', 8)
-                    pdf.set_draw_color(220,220,220); pdf.line(10, pdf.get_y(), 200, pdf.get_y())
-                    pdf.ln(5) 
-            return soma, qtd
-
-        s_tit, q_tit = print_tabela("ELENCO TITULAR", "TITULAR")
-        pdf.ln(2) 
-        print_tabela("BANCO DE RESERVAS", "RESERVA")
-        
-        pdf.ln(3)
-        med = s_tit/q_tit if q_tit > 0 else 0
-        pdf.set_fill_color(50,50,50); pdf.set_text_color(255,255,255)
-        pdf.set_font("Arial", 'B', 11)
-        pdf.cell(0, 8, f"FORÇA DO TIME (Média Titular): {med:.1f}", 0, 1, 'C', fill=True)
-        
-        msg = MIMEMultipart()
-        msg['From'], msg['To'] = EMAIL_REMETENTE, EMAIL_DESTINO
-        msg['Subject'] = f"Inscrição: {nome_time}"
-        msg.attach(MIMEText(f"Time: {nome_time}\nTitular: {kit_titular['modelo']}\nReserva: {kit_reserva['modelo']}", 'plain'))
-        
-        files = [('Escalacao.pdf', pdf.output(dest='S').encode('latin-1'), 'application/pdf'),
-                 (f'Master_{nome_time}.csv', csv_str.encode('utf-8-sig'), 'text/csv')]
-        if escudo: files.append(('Escudo.png', escudo.getvalue(), 'image/png'))
-        
-        for fname, fcontent, ftype in files:
-            att = MIMEBase(*ftype.split('/'))
-            att.set_payload(fcontent); encoders.encode_base64(att)
-            att.add_header('Content-Disposition', f'attachment; filename="{fname}"')
-            msg.attach(att)
-
-        with smtplib.SMTP_SSL('smtp.gmail.com', 465) as s:
-            s.login(EMAIL_REMETENTE, SENHA_APP); s.send_message(msg)
+            pdf.ln(3)
+            med = s_tit/q_tit if q_tit > 0 else 0
+            pdf.set_fill_color(50,50,50); pdf.set_text_color(255,255,255)
+            pdf.set_font("Arial", 'B', 11)
+            pdf.cell(0, 8, f"FORÇA DO TIME (Média Titular): {med:.1f}", 0, 1, 'C', fill=True)
             
-        st.success("✅ Inscrição Enviada!")
+            msg = MIMEMultipart()
+            msg['From'], msg['To'] = EMAIL_REMETENTE, EMAIL_DESTINO
+            msg['Subject'] = f"Inscrição: {nome_time}"
+            msg.attach(MIMEText(f"Time: {nome_time}\nTitular: {kit_titular['modelo']}\nReserva: {kit_reserva['modelo']}", 'plain'))
+            
+            files = [('Escalacao.pdf', pdf.output(dest='S').encode('latin-1'), 'application/pdf'),
+                    (f'Master_{nome_time}.csv', csv_str.encode('utf-8-sig'), 'text/csv')]
+            if escudo: files.append(('Escudo.png', escudo.getvalue(), 'image/png'))
+            
+            for fname, fcontent, ftype in files:
+                att = MIMEBase(*ftype.split('/'))
+                att.set_payload(fcontent); encoders.encode_base64(att)
+                att.add_header('Content-Disposition', f'attachment; filename="{fname}"')
+                msg.attach(att)
 
-    except Exception as e:
-        st.error(f"Erro: {e}")
+            with smtplib.SMTP_SSL('smtp.gmail.com', 465) as s:
+                s.login(EMAIL_REMETENTE, SENHA_APP); s.send_message(msg)
+                
+            st.success("✅ Inscrição Enviada com Sucesso!")
+
+        except smtplib.SMTPAuthenticationError:
+            st.error("❌ Erro de Login no E-mail! Verifique se a SENHA DE APP está correta no código.")
+        except Exception as e:
+            st.error(f"❌ Erro ao enviar: {e}")
