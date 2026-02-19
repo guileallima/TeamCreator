@@ -1,4 +1,4 @@
-aimport streamlit as st
+import streamlit as st
 import pandas as pd
 from fpdf import FPDF
 import smtplib
@@ -476,3 +476,4 @@ if st.button("✅ ENVIAR INSCRIÇÃO", type="primary", use_container_width=True)
             st.error("Erro de Senha do E-mail.")
         except Exception as e:
             st.error(f"Erro: {e}")
+
