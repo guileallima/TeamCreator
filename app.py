@@ -101,7 +101,9 @@ def load_data_light():
             # Limpeza Preço Vectorizada (Rápida)
             col_price = None
             for c in ['MARKET PRICE', 'MARKET VALUE (M€)', 'MARKET VALUE', 'VALUE', 'PRICE']:
-                if c in df.columns: col_price = c; break
+                if c in df.columns: 
+                    col_price = c
+                    break
             
             if col_price:
                 df['MARKET PRICE'] = df[col_price].astype(str).str.replace(r'[^\d.,]', '', regex=True).str.replace(',', '.')
@@ -322,7 +324,7 @@ if st.button("✅ ENVIAR INSCRIÇÃO", type="primary", use_container_width=True)
     
     with st.spinner("Enviando..."):
         try:
-            # 1. GERAÇÃO DO TXT SIMPLES (ID + NOME)
+            # 1. GERAÇÃO DO TXT (ID + NOME + PREÇO)
             txt_content = f"TIME: {nome_time.upper()}\n"
             txt_content += f"JOGADORES: {int1} & {int2}\n"
             txt_content += f"FORMAÇÃO: {formacao}\n"
@@ -332,23 +334,37 @@ if st.button("✅ ENVIAR INSCRIÇÃO", type="primary", use_container_width=True)
             for p in lista:
                 if p['T'] == "TITULAR":
                     num = st.session_state.numeros.get(p['K'], "")
-                    txt_content += f"ID: {p['INDEX']} | Nº: {num} | {p['NAME']}\n"
+                    preco = p.get('MARKET PRICE', 0.0)
+                    txt_content += f"ID: {p['INDEX']} | Nº: {num} | {p['NAME']} | Preço: €{preco:.1f}\n"
             
             txt_content += "\n--- RESERVAS ---\n"
             for p in lista:
                 if p['T'] == "RESERVA":
                     num = st.session_state.numeros.get(p['K'], "")
-                    txt_content += f"ID: {p['INDEX']} | Nº: {num} | {p['NAME']}\n"
+                    preco = p.get('MARKET PRICE', 0.0)
+                    txt_content += f"ID: {p['INDEX']} | Nº: {num} | {p['NAME']} | Preço: €{preco:.1f}\n"
 
             # 2. GERAÇÃO DO PDF VISUAL
             pdf = FPDF()
             pdf.add_page()
             pdf.set_fill_color(20,20,20); pdf.rect(0,0,210,50,'F')
             
+            # Tratamento da imagem do Escudo para o FPDF
             if escudo:
-                with tempfile.NamedTemporaryFile(delete=False, suffix=".png") as tf:
-                    tf.write(escudo.getvalue()); tname=tf.name
-                pdf.image(tname, x=10, y=5, w=25); os.unlink(tname)
+                ext = os.path.splitext(escudo.name)[1].lower() if escudo.name else ".png"
+                if ext not in ['.png', '.jpg', '.jpeg']: 
+                    ext = '.png'
+                
+                with tempfile.NamedTemporaryFile(delete=False, suffix=ext) as tf:
+                    tf.write(escudo.getvalue())
+                    tname = tf.name
+                
+                try:
+                    pdf.image(tname, x=10, y=5, w=25)
+                except Exception as img_e:
+                    print(f"Erro ao anexar escudo no PDF: {img_e}")
+                finally:
+                    os.unlink(tname)
             
             pdf.set_font("Arial", 'B', 24); pdf.set_text_color(255,255,255)
             pdf.set_y(10); pdf.cell(0, 10, nome_time.upper(), 0, 1, 'C')
@@ -361,7 +377,8 @@ if st.button("✅ ENVIAR INSCRIÇÃO", type="primary", use_container_width=True)
                 if kit['img'] and os.path.exists(kit['img']):
                     pdf.image(kit['img'], x=x_pos, y=5, w=25)
                 pdf.set_xy(x_pos, 32)
-                pdf.set_font("Arial", 'B', 7); pdf.set_text_color(255,255,255)
+                pdf.set_font("Arial", 'B', 7);
+                pdf.set_text_color(255,255,255)
                 pdf.cell(25, 3, label, 0, 1, 'C')
                 pdf.cell(25, 3, kit['modelo'], 0, 1, 'C')
                 
@@ -399,7 +416,9 @@ if st.button("✅ ENVIAR INSCRIÇÃO", type="primary", use_container_width=True)
                         raw_num = st.session_state.numeros.get(p['K'], "")
                         num = int(raw_num) if raw_num.isdigit() else ""
                         ov = p.get('OVERALL', 0)
-                        try: soma += float(ov); qtd += 1
+                        try: 
+                            soma += float(ov)
+                            qtd += 1
                         except: pass
                         pdf.cell(20, 5, p['P'], 0, 0, 'C')
                         pdf.cell(15, 5, str(num), 0, 0, 'C')
@@ -407,7 +426,8 @@ if st.button("✅ ENVIAR INSCRIÇÃO", type="primary", use_container_width=True)
                         pdf.set_font("Arial", 'B', 8)
                         pdf.cell(30, 5, str(ov), 0, 1, 'C')
                         pdf.set_font("Arial", '', 8)
-                        pdf.set_draw_color(220,220,220); pdf.line(10, pdf.get_y(), 200, pdf.get_y())
+                        pdf.set_draw_color(220,220,220)
+                        pdf.line(10, pdf.get_y(), 200, pdf.get_y())
                         pdf.ln(5) 
                 return soma, qtd
 
@@ -417,7 +437,8 @@ if st.button("✅ ENVIAR INSCRIÇÃO", type="primary", use_container_width=True)
             
             pdf.ln(3)
             med = s_tit/q_tit if q_tit > 0 else 0
-            pdf.set_fill_color(50,50,50); pdf.set_text_color(255,255,255)
+            pdf.set_fill_color(50,50,50)
+            pdf.set_text_color(255,255,255)
             pdf.set_font("Arial", 'B', 11)
             pdf.cell(0, 8, f"FORÇA: {med:.1f}", 0, 1, 'C', fill=True)
             
@@ -434,7 +455,7 @@ if st.button("✅ ENVIAR INSCRIÇÃO", type="primary", use_container_width=True)
             att1.add_header('Content-Disposition', 'attachment; filename="Elenco.pdf"')
             msg.attach(att1)
             
-            # Anexa TXT (Simples)
+            # Anexa TXT (Atualizado com PREÇO)
             att2 = MIMEBase('text', 'plain')
             att2.set_payload(txt_content.encode('utf-8'))
             encoders.encode_base64(att2)
@@ -449,7 +470,8 @@ if st.button("✅ ENVIAR INSCRIÇÃO", type="primary", use_container_width=True)
                 msg.attach(att3)
 
             with smtplib.SMTP_SSL('smtp.gmail.com', 465) as s:
-                s.login(EMAIL_REMETENTE, SENHA_APP); s.send_message(msg)
+                s.login(EMAIL_REMETENTE, SENHA_APP)
+                s.send_message(msg)
                 
             st.success("✅ ENVIADO COM SUCESSO!")
 
