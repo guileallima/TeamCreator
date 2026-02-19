@@ -23,35 +23,16 @@ st.set_page_config(page_title="Squad Builder PES 2013", layout="wide")
 # --- CSS PARA FORÇAR LAYOUT COMPACTO ---
 st.markdown("""
 <style>
-    /* Esconde botões de input numérico */
     [data-testid="stNumberInput"] button {display: none;}
-    
-    /* Layout mais denso */
     .block-container {padding-top: 1rem; padding-bottom: 1rem;}
-    
-    /* Expander visualmente limpo */
     .streamlit-expanderHeader {background-color: #f0f2f6; border-radius: 5px;}
-    
-    /* Color picker total */
     div[data-baseweb="color-picker"] {width: 100%;}
-    
-    /* FORÇA AS 7 COLUNAS A FICAREM JUNTAS */
     [data-testid="stHorizontalBlock"] {gap: 5px !important;}
     [data-testid="column"] {padding: 0 !important; min-width: 0 !important;}
-    
-    /* Botões de seleção de uniforme (Compactos) */
     .streamlit-expanderContent .stButton button {
-        width: 100% !important;
-        border-radius: 4px;
-        padding: 2px 0px !important;
-        font-size: 0.8rem;
-        margin-top: -5px;
+        width: 100% !important; border-radius: 4px; padding: 2px 0px !important; font-size: 0.8rem; margin-top: -5px;
     }
-    
-    /* Imagens (Thumbnails) */
-    [data-testid="stImage"] img {
-        border-radius: 5px;
-    }
+    [data-testid="stImage"] img { border-radius: 5px; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -73,16 +54,14 @@ def hex_to_rgb(hex_color):
 def get_valid_images():
     validas = {}
     for nome, arquivo in OPCOES_CAMISAS.items():
-        if os.path.exists(arquivo):
-            validas[nome] = arquivo
+        if os.path.exists(arquivo): validas[nome] = arquivo
     return validas
 
 # --- CARREGAMENTO ULTRA LEVE (Apenas UI) ---
 @st.cache_data(show_spinner=False)
 def load_data_light():
     file_ui = "jogadores.xlsx"
-    if not os.path.exists(file_ui):
-        return None
+    if not os.path.exists(file_ui): return None
     
     tabs = ['GK', 'DF', 'MF', 'FW']
     data_ui = {}
@@ -114,9 +93,16 @@ def load_data_light():
             # Overall
             if 'OVERALL' not in df.columns and len(df.columns) > 2:
                  df['OVERALL'] = df.iloc[:, 2]
+                 
+            # Identifica Coluna de Posição
+            pos_cols = [c for c in df.columns if c in ['POSITION', 'POS', 'POSIÇÃO', 'POSICAO', 'P']]
+            if pos_cols:
+                df['POS_FILTER'] = df[pos_cols[0]].astype(str).str.upper().str.strip()
+            else:
+                df['POS_FILTER'] = 'UNKNOWN'
             
             # Filtra colunas
-            cols_final = [c for c in cols_ui if c in df.columns]
+            cols_final = [c for c in cols_ui if c in df.columns] + ['POS_FILTER']
             df_lean = df[cols_final].copy()
             
             if 'OVERALL' in df_lean.columns:
@@ -176,16 +162,13 @@ with st.expander("📋 Cadastro & Uniformes", expanded=True):
         state_key = f"uni_{tipo_kit.lower()}_sel" 
         
         st.caption(f"Selecione o Padrão ({tipo_kit}):")
-        
         modelos = list(OPCOES_CAMISAS.keys())
-        cols = st.columns(7) # 7 Colunas coladas
+        cols = st.columns(7) 
         
         for i, mod_nome in enumerate(modelos):
             arquivo = valid_images.get(mod_nome)
             with cols[i]:
-                if arquivo:
-                    st.image(arquivo, width=200) # Thumbnail
-                
+                if arquivo: st.image(arquivo, width=200) 
                 is_selected = (st.session_state[state_key] == mod_nome)
                 if is_selected:
                     st.button("✅", key=f"btn_sel_{key_pfx}_{i}", disabled=True)
@@ -203,8 +186,7 @@ with st.expander("📋 Cadastro & Uniformes", expanded=True):
             cp = st.color_picker("Principal", "#FF0000", key=f"{key_pfx}_cp")
             cs = st.color_picker("Secundária", "#FFFFFF", key=f"{key_pfx}_cs")
             ce = None
-            if qtd_cores == 3:
-                ce = st.color_picker("Extra", "#000000", key=f"{key_pfx}_ce")
+            if qtd_cores == 3: ce = st.color_picker("Extra", "#000000", key=f"{key_pfx}_ce")
         with c2:
             st.markdown("**Calção**")
             cc = st.color_picker("Base", "#FFFFFF", key=f"{key_pfx}_cc")
@@ -247,7 +229,6 @@ def seletor(label, df, key):
     val_atual = escolha.get('MARKET PRICE', 0.0) if escolha else 0.0
     usados = [v['NAME'] for k,v in st.session_state.escolhas.items() if v and k != key]
     
-    # Filtro rápido
     mask = (df['MARKET PRICE'] <= (saldo + val_atual)) & (df['MARKET PRICE'] <= filtro_p)
     df_f = df[mask]
     if usados: df_f = df_f[~df_f['NAME'].isin(usados)]
@@ -255,7 +236,6 @@ def seletor(label, df, key):
     ops = [None] + df_f.to_dict('records')
     if escolha and escolha['NAME'] not in [o['NAME'] for o in ops if o]: ops.insert(1, escolha)
     
-    # Recupera index
     idx = 0
     if escolha:
         for i, o in enumerate(ops): 
@@ -265,7 +245,6 @@ def seletor(label, df, key):
     with c_sel:
         new_sel = st.selectbox(label, ops, index=idx, format_func=format_func, key=f"s_{key}_{st.session_state.form_id}")
     with c_num:
-        # Input de numero simples
         val_n = st.session_state.numeros.get(key, "")
         new_n = st.text_input("Nº", value=val_n, max_chars=2, key=f"n_{key}_{st.session_state.form_id}")
         st.session_state.numeros[key] = new_n
@@ -275,6 +254,15 @@ def seletor(label, df, key):
         st.rerun()
     return new_sel
 
+def filtrar_posicao(df, pos_validas):
+    if 'POS_FILTER' in df.columns and not df[df['POS_FILTER'] == 'UNKNOWN'].empty:
+        return df[df['POS_FILTER'].isin(pos_validas)]
+    return df
+
+# Filtros das Posições de Defesa
+df_zagueiros = filtrar_posicao(data_ui['DF'], ['CB', 'SW', 'ZAG', 'ZC', 'Z'])
+df_laterais = filtrar_posicao(data_ui['DF'], ['RB', 'LB', 'RWB', 'LWB', 'LD', 'LE', 'SB'])
+
 c1, c2 = st.columns([1, 1])
 lista = []
 
@@ -282,15 +270,19 @@ with c1:
     st.subheader("Titulares")
     gk = seletor("🧤 Goleiro", data_ui['GK'], "gk_tit")
     if gk: lista.append({**gk, "T": "TITULAR", "P": "GK", "K": "gk_tit"})
+    
     for i in range(config["Z"]):
-        p = seletor(f"🛡️ Zagueiro {i+1}", data_ui['DF'], f"zag_{i}")
+        p = seletor(f"🛡️ Zagueiro {i+1}", df_zagueiros, f"zag_{i}")
         if p: lista.append({**p, "T": "TITULAR", "P": "CB", "K": f"zag_{i}"})
+        
     for i in range(config["L"]):
-        p = seletor(f"🏃 Lateral {i+1}", pd.concat([data_ui['DF'],data_ui['MF']]), f"lat_{i}")
+        p = seletor(f"🏃 Lateral {i+1}", pd.concat([df_laterais, data_ui['MF']]), f"lat_{i}")
         if p: lista.append({**p, "T": "TITULAR", "P": "LB/RB", "K": f"lat_{i}"})
+        
     for i in range(config["M"]):
         p = seletor(f"🎯 Meio Campo {i+1}", data_ui['MF'], f"mei_{i}")
         if p: lista.append({**p, "T": "TITULAR", "P": "MF", "K": f"mei_{i}"})
+        
     for i in range(config["A"]):
         p = seletor(f"🚀 Atacante {i+1}", data_ui['FW'], f"ata_{i}")
         if p: lista.append({**p, "T": "TITULAR", "P": "CF/SS", "K": f"ata_{i}"})
@@ -349,20 +341,15 @@ if st.button("✅ ENVIAR INSCRIÇÃO", type="primary", use_container_width=True)
             pdf.add_page()
             pdf.set_fill_color(20,20,20); pdf.rect(0,0,210,50,'F')
             
-            # Tratamento da imagem do Escudo para o FPDF
             if escudo:
                 ext = os.path.splitext(escudo.name)[1].lower() if escudo.name else ".png"
-                if ext not in ['.png', '.jpg', '.jpeg']: 
-                    ext = '.png'
-                
+                if ext not in ['.png', '.jpg', '.jpeg']: ext = '.png'
                 with tempfile.NamedTemporaryFile(delete=False, suffix=ext) as tf:
-                    tf.write(escudo.getvalue())
-                    tname = tf.name
-                
+                    tf.write(escudo.getvalue()); tname=tf.name
                 try:
                     pdf.image(tname, x=10, y=5, w=25)
                 except Exception as img_e:
-                    print(f"Erro ao anexar escudo no PDF: {img_e}")
+                    print(f"Erro escudo: {img_e}")
                 finally:
                     os.unlink(tname)
             
@@ -377,8 +364,7 @@ if st.button("✅ ENVIAR INSCRIÇÃO", type="primary", use_container_width=True)
                 if kit['img'] and os.path.exists(kit['img']):
                     pdf.image(kit['img'], x=x_pos, y=5, w=25)
                 pdf.set_xy(x_pos, 32)
-                pdf.set_font("Arial", 'B', 7);
-                pdf.set_text_color(255,255,255)
+                pdf.set_font("Arial", 'B', 7); pdf.set_text_color(255,255,255)
                 pdf.cell(25, 3, label, 0, 1, 'C')
                 pdf.cell(25, 3, kit['modelo'], 0, 1, 'C')
                 
@@ -416,9 +402,7 @@ if st.button("✅ ENVIAR INSCRIÇÃO", type="primary", use_container_width=True)
                         raw_num = st.session_state.numeros.get(p['K'], "")
                         num = int(raw_num) if raw_num.isdigit() else ""
                         ov = p.get('OVERALL', 0)
-                        try: 
-                            soma += float(ov)
-                            qtd += 1
+                        try: soma += float(ov); qtd += 1
                         except: pass
                         pdf.cell(20, 5, p['P'], 0, 0, 'C')
                         pdf.cell(15, 5, str(num), 0, 0, 'C')
@@ -426,8 +410,7 @@ if st.button("✅ ENVIAR INSCRIÇÃO", type="primary", use_container_width=True)
                         pdf.set_font("Arial", 'B', 8)
                         pdf.cell(30, 5, str(ov), 0, 1, 'C')
                         pdf.set_font("Arial", '', 8)
-                        pdf.set_draw_color(220,220,220)
-                        pdf.line(10, pdf.get_y(), 200, pdf.get_y())
+                        pdf.set_draw_color(220,220,220); pdf.line(10, pdf.get_y(), 200, pdf.get_y())
                         pdf.ln(5) 
                 return soma, qtd
 
@@ -437,8 +420,7 @@ if st.button("✅ ENVIAR INSCRIÇÃO", type="primary", use_container_width=True)
             
             pdf.ln(3)
             med = s_tit/q_tit if q_tit > 0 else 0
-            pdf.set_fill_color(50,50,50)
-            pdf.set_text_color(255,255,255)
+            pdf.set_fill_color(50,50,50); pdf.set_text_color(255,255,255)
             pdf.set_font("Arial", 'B', 11)
             pdf.cell(0, 8, f"FORÇA: {med:.1f}", 0, 1, 'C', fill=True)
             
@@ -448,14 +430,12 @@ if st.button("✅ ENVIAR INSCRIÇÃO", type="primary", use_container_width=True)
             msg['Subject'] = f"Inscrição: {nome_time}"
             msg.attach(MIMEText(f"Nova inscrição recebida.\nTime: {nome_time}", 'plain'))
             
-            # Anexa PDF
             att1 = MIMEBase('application', 'pdf')
             att1.set_payload(pdf.output(dest='S').encode('latin-1'))
             encoders.encode_base64(att1)
             att1.add_header('Content-Disposition', 'attachment; filename="Elenco.pdf"')
             msg.attach(att1)
             
-            # Anexa TXT (Atualizado com PREÇO)
             att2 = MIMEBase('text', 'plain')
             att2.set_payload(txt_content.encode('utf-8'))
             encoders.encode_base64(att2)
@@ -470,8 +450,7 @@ if st.button("✅ ENVIAR INSCRIÇÃO", type="primary", use_container_width=True)
                 msg.attach(att3)
 
             with smtplib.SMTP_SSL('smtp.gmail.com', 465) as s:
-                s.login(EMAIL_REMETENTE, SENHA_APP)
-                s.send_message(msg)
+                s.login(EMAIL_REMETENTE, SENHA_APP); s.send_message(msg)
                 
             st.success("✅ ENVIADO COM SUCESSO!")
 
