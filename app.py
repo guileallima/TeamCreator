@@ -138,7 +138,6 @@ if 'NATIONALITY' in df_all.columns:
     lista_nacionalidades = df_all['NATIONALITY'].dropna().astype(str).str.strip().unique().tolist()
     lista_nacionalidades = sorted([n for n in lista_nacionalidades if n])
 
-# Identifica o nome do Brasil na planilha (pode estar "Brasil" ou "Brazil")
 br_str = next((n for n in lista_nacionalidades if n.upper() in ['BRASIL', 'BRAZIL']), 'Brasil')
 if br_str in lista_nacionalidades:
     lista_nacionalidades.remove(br_str)
@@ -162,14 +161,9 @@ saldo = ORCAMENTO_MAX - custo_total
 
 # --- TÍTULO E PAINEL FINANCEIRO ---
 st.title("⚽ SQUAD BUILDER")
-st.markdown("### 💰 Painel Financeiro & Filtros")
+st.markdown("### 💰 Painel Financeiro")
 
-c_filt, c_pais, c_gasto, c_saldo = st.columns([1, 1, 1, 1])
-with c_filt:
-    filtro_p = st.number_input("Preço Máx. (€)", 0.0, 100000.0, ORCAMENTO_MAX, 100.0, key="input_filter")
-with c_pais:
-    # Index 1 faz o padrão ser "Todos"
-    filtro_pais = st.selectbox("Nacionalidade", opcoes_nacionalidade, index=1, key="input_pais")
+c_gasto, c_saldo = st.columns(2)
 with c_gasto:
     st.metric("Gasto Atual", f"€{custo_total:.0f}")
 with c_saldo:
@@ -177,6 +171,35 @@ with c_saldo:
 
 st.progress(min(custo_total / ORCAMENTO_MAX, 1.0))
 st.markdown("---")
+
+# --- FILTROS GLOBAIS ---
+with st.expander("🔍 Filtros de Jogadores", expanded=True):
+    c_filt, c_pais = st.columns(2)
+    with c_filt:
+        filtro_p = st.number_input("Preço Máx. (€)", 0.0, 100000.0, ORCAMENTO_MAX, 100.0, key="input_filter")
+    with c_pais:
+        filtro_pais = st.selectbox("Nacionalidade", opcoes_nacionalidade, index=1, key="input_pais")
+        
+    st.markdown("**Filtrar por Posição (Jogadores de Linha)**")
+    c1, c2, c3 = st.columns(3)
+    chk = {}
+    chk["Goleiro"] = c1.checkbox("Goleiro (GK)", key="c_gk")
+    chk["Zagueiro"] = c1.checkbox("Zagueiro (CB, SWP, D)", key="c_cb")
+    chk["Lateral Esquerdo"] = c1.checkbox("Lateral Esq. (LB, LWB)", key="c_le")
+    
+    chk["Lateral Direito"] = c2.checkbox("Lateral Dir. (RB, RWB, SB)", key="c_ld")
+    chk["Volante"] = c2.checkbox("Volante (DMF)", key="c_vol")
+    chk["Meio Campo"] = c2.checkbox("Meio Campo (CMF, SMF...)", key="c_mc")
+    
+    chk["Atacante"] = c3.checkbox("Atacante (CF, SS, A)", key="c_ata")
+    chk["Ponta Esquerda"] = c3.checkbox("Ponta Esq. (LWF, WF)", key="c_pe")
+    chk["Ponta Direita"] = c3.checkbox("Ponta Dir. (RWF)", key="c_pd")
+
+    allowed_pos = []
+    for k, is_chk in chk.items():
+        if is_chk: allowed_pos.extend(POS_MAPPING[k])
+
+df_linha_filtrado = df_all if not allowed_pos else df_all[df_all['REG. POS.'].isin(allowed_pos)]
 
 # --- COMPONENTES AUXILIARES ---
 def format_func(row):
@@ -199,7 +222,6 @@ def seletor(label, df, key):
     
     mask = (df['MARKET PRICE'] <= (saldo + val_atual)) & (df['MARKET PRICE'] <= filtro_p)
     
-    # Aplica o filtro de país, se não for "Todos"
     if filtro_pais != "Todos":
         mask = mask & (df['NATIONALITY'].astype(str).str.strip() == filtro_pais)
         
@@ -207,8 +229,6 @@ def seletor(label, df, key):
     if usados: df_f = df_f[~df_f['NAME'].isin(usados)]
         
     ops = [None] + df_f.to_dict('records')
-    
-    # Mantém a escolha atual visível mesmo se não bater com o filtro (para não quebrar escolhas passadas)
     if escolha and escolha['NAME'] not in [o['NAME'] for o in ops if o]: ops.insert(1, escolha)
     
     idx = 0
@@ -228,27 +248,6 @@ def seletor(label, df, key):
         st.session_state.escolhas[key] = new_sel
         st.rerun()
     return new_sel
-
-def render_position_filters(prefix):
-    with st.expander("🔍 Filtro de Posições (Jogadores de Linha)", expanded=False):
-        c1, c2, c3 = st.columns(3)
-        chk = {}
-        chk["Goleiro"] = c1.checkbox("Goleiro (GK)", key=f"c_gk_{prefix}")
-        chk["Zagueiro"] = c1.checkbox("Zagueiro (CB, SWP, D)", key=f"c_cb_{prefix}")
-        chk["Lateral Esquerdo"] = c1.checkbox("Lateral Esq. (LB, LWB)", key=f"c_le_{prefix}")
-        
-        chk["Lateral Direito"] = c2.checkbox("Lateral Dir. (RB, RWB, SB)", key=f"c_ld_{prefix}")
-        chk["Volante"] = c2.checkbox("Volante (DMF)", key=f"c_vol_{prefix}")
-        chk["Meio Campo"] = c2.checkbox("Meio Campo (CMF, SMF...)", key=f"c_mc_{prefix}")
-        
-        chk["Atacante"] = c3.checkbox("Atacante (CF, SS, A)", key=f"c_ata_{prefix}")
-        chk["Ponta Esquerda"] = c3.checkbox("Ponta Esq. (LWF, WF)", key=f"c_pe_{prefix}")
-        chk["Ponta Direita"] = c3.checkbox("Ponta Dir. (RWF)", key=f"c_pd_{prefix}")
-
-        allowed = []
-        for k, is_chk in chk.items():
-            if is_chk: allowed.extend(POS_MAPPING[k])
-        return allowed
 
 lista = []
 
@@ -320,39 +319,33 @@ with tab_uni:
     with tab_reserva_uni: kit_reserva = ui_uniforme("Reserva")
 
 with tab_tit:
-    allowed_tit = render_position_filters("tit")
-    df_linha_tit = df_all if not allowed_tit else df_all[df_all['REG. POS.'].isin(allowed_tit)]
-    
     c_tit1, c_tit2 = st.columns(2)
     with c_tit1:
         gk = seletor("Jogador 1 (Goleiro)", df_gk, "gk_tit")
         if gk: lista.append({**gk, "T": "TITULAR", "P": gk.get('REG. POS.', 'GK'), "K": "gk_tit"})
         
         for i in range(2, 7):
-            p = seletor(f"Jogador {i}", df_linha_tit, f"tit_{i}")
+            p = seletor(f"Jogador {i}", df_linha_filtrado, f"tit_{i}")
             if p: lista.append({**p, "T": "TITULAR", "P": p.get('REG. POS.', 'N/A'), "K": f"tit_{i}"})
             
     with c_tit2:
         for i in range(7, 12):
-            p = seletor(f"Jogador {i}", df_linha_tit, f"tit_{i}")
+            p = seletor(f"Jogador {i}", df_linha_filtrado, f"tit_{i}")
             if p: lista.append({**p, "T": "TITULAR", "P": p.get('REG. POS.', 'N/A'), "K": f"tit_{i}"})
 
 with tab_res:
-    allowed_res = render_position_filters("res")
-    df_linha_res = df_all if not allowed_res else df_all[df_all['REG. POS.'].isin(allowed_res)]
-    
     c_res1, c_res2 = st.columns(2)
     with c_res1:
         gkr = seletor("Reserva 1 (Goleiro)", df_gk, "gk_res")
         if gkr: lista.append({**gkr, "T": "RESERVA", "P": gkr.get('REG. POS.', 'GK'), "K": "gk_res"})
         
         for i in range(2, 4):
-            p = seletor(f"Reserva {i}", df_linha_res, f"res_{i}")
+            p = seletor(f"Reserva {i}", df_linha_filtrado, f"res_{i}")
             if p: lista.append({**p, "T": "RESERVA", "P": p.get('REG. POS.', 'N/A'), "K": f"res_{i}"})
             
     with c_res2:
         for i in range(4, 6):
-            p = seletor(f"Reserva {i}", df_linha_res, f"res_{i}")
+            p = seletor(f"Reserva {i}", df_linha_filtrado, f"res_{i}")
             if p: lista.append({**p, "T": "RESERVA", "P": p.get('REG. POS.', 'N/A'), "K": f"res_{i}"})
 
 st.markdown("---")
