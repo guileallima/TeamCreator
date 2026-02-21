@@ -236,14 +236,21 @@ def reset_callback():
     st.session_state.numeros = {}
     st.session_state.form_id += 1
 
-custo_total = sum([p.get('MARKET PRICE', 0.0) for p in st.session_state.escolhas.values() if p])
+jogadores_atuais = [p for p in st.session_state.escolhas.values() if p]
+custo_total = sum([p.get('MARKET PRICE', 0.0) for p in jogadores_atuais])
 saldo = ORCAMENTO_MAX - custo_total
+
+qtd_jogadores = len(jogadores_atuais)
+media_overall = sum([p.get('OVERALL', 0) for p in jogadores_atuais]) / qtd_jogadores if qtd_jogadores > 0 else 0
 
 # --- SIDEBAR (PAINEL FINANCEIRO & FILTROS) ---
 st.sidebar.title("💰 Painel Financeiro")
-st.sidebar.metric("Gasto Atual", f"€{custo_total:.0f}")
-st.sidebar.metric("Saldo Restante", f"€{saldo:.0f}")
+m1, m2 = st.sidebar.columns(2)
+m1.metric("Gasto Atual", f"€{custo_total:.0f}")
+m2.metric("Saldo Restante", f"€{saldo:.0f}")
 st.sidebar.progress(min(custo_total / ORCAMENTO_MAX, 1.0))
+
+st.sidebar.metric("Força Média (OVR)", f"{media_overall:.1f}", help="Média do overall de todos os jogadores selecionados (Titulares + Reservas)")
 
 st.sidebar.markdown("---")
 st.sidebar.subheader("🔍 Filtros de Jogadores")
@@ -276,15 +283,10 @@ with st.sidebar.expander("📖 O que cada característica faz?"):
 # --- COMPONENTES AUXILIARES ---
 def format_func(row):
     if row is None: return "Selecionar..."
-    
     idade = row.get('AGE', '?')
-    if pd.notna(idade) and isinstance(idade, (int, float)):
-        idade = int(idade)
-        
+    if pd.notna(idade) and isinstance(idade, (int, float)): idade = int(idade)
     nacionalidade = row.get('NATIONALITY', '?')
-    if pd.isna(nacionalidade):
-        nacionalidade = '?'
-        
+    if pd.isna(nacionalidade): nacionalidade = '?'
     return f"{row.get('NAME','?')} | {nacionalidade} | {row.get('REG. POS.','?')} | Idade: {idade} | OV: {row.get('OVERALL','?')} | €{row.get('MARKET PRICE',0):.1f}"
 
 def seletor(label, df, key):
@@ -292,7 +294,6 @@ def seletor(label, df, key):
     val_atual = escolha.get('MARKET PRICE', 0.0) if escolha else 0.0
     usados = [v['NAME'] for k,v in st.session_state.escolhas.items() if v and k != key]
     
-    # Restrição baseada no saldo disponível somado ao valor já empenhado na vaga atual
     mask = (df['MARKET PRICE'] <= (saldo + val_atual)) & (df['MARKET PRICE'] <= filtro_p)
     mask = mask & (df['HEIGHT'] >= filtro_alt)
     mask = mask & (df['TOP SPEED'] >= filtro_vel)
@@ -301,26 +302,30 @@ def seletor(label, df, key):
         mask = mask & (df['NATIONALITY'].astype(str).str.strip() == filtro_pais)
         
     for hab in hab_selecionadas:
-        if hab in PLAYSTYLES:
-            col_hab = PLAYSTYLES[hab][0]
-        else:
-            col_hab = SKILLS[hab][0]
+        if hab in PLAYSTYLES: col_hab = PLAYSTYLES[hab][0]
+        else: col_hab = SKILLS[hab][0]
         mask = mask & (df[col_hab] == 1)
         
     df_f = df[mask]
     if usados: df_f = df_f[~df_f['NAME'].isin(usados)]
         
-    ops = [None] + df_f.to_dict('records')
-    if escolha and escolha['NAME'] not in [o['NAME'] for o in ops if o]: ops.insert(1, escolha)
+    ops = df_f.to_dict('records')
     
-    idx = 0
+    # Se já tem um escolhido que não bate mais no filtro, o incluímos para não quebrar o layout visual
+    if escolha and escolha['NAME'] not in [o['NAME'] for o in ops]: 
+        ops.insert(0, escolha)
+    
+    # Busca o Index nativo
+    idx = None
     if escolha:
         for i, o in enumerate(ops): 
-            if o and o['NAME'] == escolha['NAME']: idx = i; break
+            if o['NAME'] == escolha['NAME']: 
+                idx = i; break
     
-    c_sel, c_num, c_btn = st.columns([5.5, 1.5, 1.0]) 
+    c_sel, c_num = st.columns([4.0, 1.0]) 
     with c_sel:
-        new_sel = st.selectbox(label, ops, index=idx, format_func=format_func, key=f"s_{key}_{st.session_state.form_id}")
+        # index=None cria a opção de remover o jogador ("X" nativo do selectbox do Streamlit)
+        new_sel = st.selectbox(label, ops, index=idx, format_func=format_func, placeholder="Selecionar jogador...", key=f"s_{key}_{st.session_state.form_id}")
         
         if new_sel:
             pos = new_sel.get('REG. POS.', '').strip().upper()
@@ -330,25 +335,15 @@ def seletor(label, df, key):
                 val = new_sel.get(col, '-')
                 return int(val) if pd.notna(val) and isinstance(val, (int, float)) else val
             
-            # --- ATRIBUTOS PRINCIPAIS ---
-            if pos in ['GK']:
-                stats_str = f"📏 ALT: {alt}cm | 🧤 HAB: {get_stat('GOAL KEEPING SKILLS')} | ⚡ RES: {get_stat('RESPONSE')} | 🛡️ DEF: {get_stat('DEFENCE')} | 🦘 SAL: {get_stat('JUMP')} | ⚖️ EQU: {get_stat('BODY BALANCE')}"
-            elif pos in ['CB', 'SWP', 'D']:
-                stats_str = f"📏 ALT: {alt}cm | 🛡️ DEF: {get_stat('DEFENCE')} | 🗣️ CAB: {get_stat('HEADER ACCURACY')} | ⚖️ EQU: {get_stat('BODY BALANCE')} | 🦘 SAL: {get_stat('JUMP')} | ⚡ RES: {get_stat('RESPONSE')}"
-            elif pos in ['LB', 'LWB', 'RB', 'RWB', 'SB']:
-                stats_str = f"📏 ALT: {alt}cm | 🚀 V.MAX: {get_stat('TOP SPEED')} | 🫁 VIG: {get_stat('STAMINA')} | 🎯 P.LON: {get_stat('LONG PASS ACCURACY')} | 💨 V.DRI: {get_stat('DRIBBLE SPEED')} | 🛡️ DEF: {get_stat('DEFENCE')}"
-            elif pos in ['DMF']:
-                stats_str = f"📏 ALT: {alt}cm | 🛡️ DEF: {get_stat('DEFENCE')} | 👟 P.CUR: {get_stat('SHORT PASS ACCURACY')} | 🫁 VIG: {get_stat('STAMINA')} | ⚖️ EQU: {get_stat('BODY BALANCE')} | 😤 TEN: {get_stat('TENACITY')}"
-            elif pos in ['CMF', 'SMF', 'RMF', 'LMF', 'AMF', 'M', 'WB']:
-                stats_str = f"📏 ALT: {alt}cm | 👟 P.CUR: {get_stat('SHORT PASS ACCURACY')} | ⚽ C.BOL: {get_stat('BALL CONTROLL')} | 🪄 P.DRI: {get_stat('DRIBBLE ACCURACY')} | 🫁 VIG: {get_stat('STAMINA')} | ⚔️ ATQ: {get_stat('ATTACK')}"
-            elif pos in ['LWF', 'WF', 'RWF']:
-                stats_str = f"📏 ALT: {alt}cm | 🚀 V.MAX: {get_stat('TOP SPEED')} | 💨 V.DRI: {get_stat('DRIBBLE SPEED')} | 💥 EXP: {get_stat('EXPLOSIVE POWER')} | 🪄 P.DRI: {get_stat('DRIBBLE ACCURACY')} | ⚔️ ATQ: {get_stat('ATTACK')}"
-            elif pos in ['SS', 'CF', 'A']:
-                stats_str = f"📏 ALT: {alt}cm | ⚔️ ATQ: {get_stat('ATTACK')} | 🎯 P.CHU: {get_stat('SHOT ACCURACY')} | 💣 F.CHU: {get_stat('KICKING POWER')} | 🗣️ CAB: {get_stat('HEADER ACCURACY')} | 🚀 V.MAX: {get_stat('TOP SPEED')}"
-            else:
-                stats_str = f"📏 ALT: {alt}cm | ⚔️ ATQ: {get_stat('ATTACK')} | 🛡️ DEF: {get_stat('DEFENCE')} | 🚀 V.MAX: {get_stat('TOP SPEED')} | 🫁 VIG: {get_stat('STAMINA')}"
+            if pos in ['GK']: stats_str = f"📏 ALT: {alt}cm | 🧤 HAB: {get_stat('GOAL KEEPING SKILLS')} | ⚡ RES: {get_stat('RESPONSE')} | 🛡️ DEF: {get_stat('DEFENCE')} | 🦘 SAL: {get_stat('JUMP')} | ⚖️ EQU: {get_stat('BODY BALANCE')}"
+            elif pos in ['CB', 'SWP', 'D']: stats_str = f"📏 ALT: {alt}cm | 🛡️ DEF: {get_stat('DEFENCE')} | 🗣️ CAB: {get_stat('HEADER ACCURACY')} | ⚖️ EQU: {get_stat('BODY BALANCE')} | 🦘 SAL: {get_stat('JUMP')} | ⚡ RES: {get_stat('RESPONSE')}"
+            elif pos in ['LB', 'LWB', 'RB', 'RWB', 'SB']: stats_str = f"📏 ALT: {alt}cm | 🚀 V.MAX: {get_stat('TOP SPEED')} | 🫁 VIG: {get_stat('STAMINA')} | 🎯 P.LON: {get_stat('LONG PASS ACCURACY')} | 💨 V.DRI: {get_stat('DRIBBLE SPEED')} | 🛡️ DEF: {get_stat('DEFENCE')}"
+            elif pos in ['DMF']: stats_str = f"📏 ALT: {alt}cm | 🛡️ DEF: {get_stat('DEFENCE')} | 👟 P.CUR: {get_stat('SHORT PASS ACCURACY')} | 🫁 VIG: {get_stat('STAMINA')} | ⚖️ EQU: {get_stat('BODY BALANCE')} | 😤 TEN: {get_stat('TENACITY')}"
+            elif pos in ['CMF', 'SMF', 'RMF', 'LMF', 'AMF', 'M', 'WB']: stats_str = f"📏 ALT: {alt}cm | 👟 P.CUR: {get_stat('SHORT PASS ACCURACY')} | ⚽ C.BOL: {get_stat('BALL CONTROLL')} | 🪄 P.DRI: {get_stat('DRIBBLE ACCURACY')} | 🫁 VIG: {get_stat('STAMINA')} | ⚔️ ATQ: {get_stat('ATTACK')}"
+            elif pos in ['LWF', 'WF', 'RWF']: stats_str = f"📏 ALT: {alt}cm | 🚀 V.MAX: {get_stat('TOP SPEED')} | 💨 V.DRI: {get_stat('DRIBBLE SPEED')} | 💥 EXP: {get_stat('EXPLOSIVE POWER')} | 🪄 P.DRI: {get_stat('DRIBBLE ACCURACY')} | ⚔️ ATQ: {get_stat('ATTACK')}"
+            elif pos in ['SS', 'CF', 'A']: stats_str = f"📏 ALT: {alt}cm | ⚔️ ATQ: {get_stat('ATTACK')} | 🎯 P.CHU: {get_stat('SHOT ACCURACY')} | 💣 F.CHU: {get_stat('KICKING POWER')} | 🗣️ CAB: {get_stat('HEADER ACCURACY')} | 🚀 V.MAX: {get_stat('TOP SPEED')}"
+            else: stats_str = f"📏 ALT: {alt}cm | ⚔️ ATQ: {get_stat('ATTACK')} | 🛡️ DEF: {get_stat('DEFENCE')} | 🚀 V.MAX: {get_stat('TOP SPEED')} | 🫁 VIG: {get_stat('STAMINA')}"
             
-            # --- CARTÕES DE HABILIDADE (S01-S26 e P01-P18) ---
             habs_ativas = []
             for h_nome, (col_name, _) in list(PLAYSTYLES.items()) + list(SKILLS.items()):
                 if new_sel.get(col_name) == 1:
@@ -365,19 +360,10 @@ def seletor(label, df, key):
             
     with c_num:
         val_n = st.session_state.numeros.get(key, 0)
-        if isinstance(val_n, str):
-             val_n = int(val_n) if val_n.isdigit() else 0
+        if isinstance(val_n, str): val_n = int(val_n) if val_n.isdigit() else 0
         new_n = st.number_input("Nº", min_value=0, max_value=99, value=val_n, step=1, key=f"n_{key}_{st.session_state.form_id}")
         st.session_state.numeros[key] = new_n
 
-    with c_btn:
-        st.markdown("<div style='margin-top: 27px;'></div>", unsafe_allow_html=True)
-        if st.button("🗑️", key=f"rm_{key}_{st.session_state.form_id}", help="Remover"):
-            st.session_state.escolhas[key] = None
-            if key in st.session_state.numeros:
-                st.session_state.numeros[key] = 0
-            st.rerun()
-        
     if new_sel != escolha:
         st.session_state.escolhas[key] = new_sel
         st.rerun()
@@ -404,7 +390,7 @@ with tab_cad:
     
     c_escudo, c_form = st.columns(2)
     escudo = c_escudo.file_uploader("Escudo", type=['png','jpg'], key="input_logo")
-    formacao = c_form.selectbox("Formação Base", ["4-5-1", "3-4-3", "4-4-2", "4-3-3", "3-5-2"], key="input_fmt", help="Informativo. O sistema permite escalar como desejar.")
+    formacao = c_form.selectbox("Formação Base", ["4-5-1", "3-4-3", "4-4-2", "4-3-3", "3-5-2"], key="input_fmt", help="Informativo. Usado para validar sua tática.")
 
 with tab_uni:
     st.subheader("Seleção de Uniformes")
@@ -425,8 +411,7 @@ with tab_uni:
                     st.image(arquivo, width=200) 
                 
                 is_selected = (st.session_state[state_key] == mod_nome)
-                if is_selected:
-                    st.button("✅", key=f"btn_sel_{key_pfx}_{i}", disabled=True)
+                if is_selected: st.button("✅", key=f"btn_sel_{key_pfx}_{i}", disabled=True)
                 else:
                     if st.button("Usar", key=f"btn_{key_pfx}_{i}"):
                         st.session_state[state_key] = mod_nome
@@ -441,8 +426,7 @@ with tab_uni:
             cp = st.color_picker("Principal", "#FF0000", key=f"{key_pfx}_cp")
             cs = st.color_picker("Secundária", "#FFFFFF", key=f"{key_pfx}_cs")
             ce = None
-            if qtd_cores == 3:
-                ce = st.color_picker("Extra", "#000000", key=f"{key_pfx}_ce")
+            if qtd_cores == 3: ce = st.color_picker("Extra", "#000000", key=f"{key_pfx}_ce")
         with c2:
             st.markdown("**Calção**")
             cc = st.color_picker("Base", "#FFFFFF", key=f"{key_pfx}_cc")
@@ -488,17 +472,53 @@ with tab_elenco:
                 if p: lista.append({**p, "T": "RESERVA", "P": p.get('REG. POS.', 'N/A'), "K": f"res_{i}"})
 
 with tab_resumo:
-    st.subheader("Resumo da Escalacão")
+    # Lógica de Validação Tática baseada nos Titulares escolhidos
+    titulares_selecionados = [p for p in lista if p['T'] == 'TITULAR']
+    cat_counts = {'GK': 0, 'DEF': 0, 'MID': 0, 'ATQ': 0}
+    
+    def_pos = ['CB', 'SWP', 'D', 'LB', 'LWB', 'RB', 'RWB', 'SB']
+    mid_pos = ['DMF', 'CMF', 'SMF', 'RMF', 'LMF', 'AMF', 'M', 'WB']
+    atk_pos = ['SS', 'CF', 'A', 'LWF', 'WF', 'RWF']
+    
+    for p in titulares_selecionados:
+        pos_limpa = str(p.get('P', '')).strip().upper()
+        if pos_limpa == 'GK': cat_counts['GK'] += 1
+        elif pos_limpa in def_pos: cat_counts['DEF'] += 1
+        elif pos_limpa in mid_pos: cat_counts['MID'] += 1
+        elif pos_limpa in atk_pos: cat_counts['ATQ'] += 1
+
+    partes_formacao = formacao.split('-')
+    req_def, req_mid, req_atk = int(partes_formacao[0]), int(partes_formacao[1]), int(partes_formacao[2])
+    
+    st.subheader("📋 Validação Tática (Equipe Titular)")
+    st.caption(f"Comparando seus jogadores escolhidos com a formação base selecionada: **{formacao}**")
+    
+    v1, v2, v3, v4 = st.columns(4)
+    v1.metric("Goleiro (Requisitado: 1)", f"{cat_counts['GK']} selecionado(s)", delta=cat_counts['GK']-1 if cat_counts['GK'] != 1 else None, delta_color="off")
+    v2.metric(f"Defensores (Req: {req_def})", f"{cat_counts['DEF']} selecionado(s)", delta=cat_counts['DEF']-req_def if cat_counts['DEF'] != req_def else None, delta_color="off")
+    v3.metric(f"Meio-Campistas (Req: {req_mid})", f"{cat_counts['MID']} selecionado(s)", delta=cat_counts['MID']-req_mid if cat_counts['MID'] != req_mid else None, delta_color="off")
+    v4.metric(f"Atacantes (Req: {req_atk})", f"{cat_counts['ATQ']} selecionado(s)", delta=cat_counts['ATQ']-req_atk if cat_counts['ATQ'] != req_atk else None, delta_color="off")
+    
+    st.markdown("---")
+    st.subheader("📊 Resumo da Escalacão")
     if len(lista) > 0:
         df_resumo = pd.DataFrame(lista)
         df_resumo['Nº'] = [st.session_state.numeros.get(p['K'], 0) for p in lista]
-        df_resumo['PREÇO (€)'] = [f"€ {p.get('MARKET PRICE', 0.0):.1f}" for p in lista]
+        df_resumo['PREÇO (€)'] = [float(p.get('MARKET PRICE', 0.0)) for p in lista]
         
         colunas_exibicao = ['Nº', 'NAME', 'P', 'OVERALL', 'PREÇO (€)', 'T']
         df_display = df_resumo[colunas_exibicao].copy()
         df_display.rename(columns={'NAME': 'NOME', 'P': 'POSIÇÃO', 'T': 'STATUS'}, inplace=True)
         
-        st.dataframe(df_display, use_container_width=True, hide_index=True)
+        # Tabela formatada garantindo que a coluna de preço continue ordenável e exiba o "€"
+        st.dataframe(
+            df_display, 
+            use_container_width=True, 
+            hide_index=True,
+            column_config={
+                "PREÇO (€)": st.column_config.NumberColumn(format="€ %.1f")
+            }
+        )
     else:
         st.info("Nenhum jogador selecionado ainda. Vá na aba 'Elenco' para montar seu time.")
 
