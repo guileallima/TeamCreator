@@ -14,7 +14,7 @@ import re
 EMAIL_REMETENTE = "leallimagui@gmail.com" 
 SENHA_APP = "nmrytcivcuidhryn" 
 EMAIL_DESTINO = "leallimagui@gmail.com"
-ORCAMENTO_MAX = 20000.0
+ORCAMENTO_MAX = 50000.0
 
 OPCOES_CAMISAS = {f"Padrão {i}": f"uniforme{i}.jpg" for i in range(1, 8)}
 
@@ -292,36 +292,38 @@ with tab_uni:
     with tab_reserva_uni: kit_reserva = ui_uniforme("Reserva")
 
 with tab_tit:
-    st.markdown("### 🧤 Goleiro Titular (Obrigatório)")
-    gk = seletor("Selecionar Goleiro", df_gk, "gk_tit")
-    if gk: lista.append({**gk, "T": "TITULAR", "P": gk.get('REG. POS.', 'GK'), "K": "gk_tit"})
-    
-    st.markdown("---")
-    st.markdown("### 🏃 Jogadores de Linha (10)")
-    
     allowed_tit = render_position_filters("tit")
     df_linha_tit = df_all if not allowed_tit else df_all[df_all['REG. POS.'].isin(allowed_tit)]
     
     c_tit1, c_tit2 = st.columns(2)
-    for i in range(1, 11):
-        with (c_tit1 if i <= 5 else c_tit2):
+    with c_tit1:
+        gk = seletor("Jogador 1 (Goleiro)", df_gk, "gk_tit")
+        if gk: lista.append({**gk, "T": "TITULAR", "P": gk.get('REG. POS.', 'GK'), "K": "gk_tit"})
+        
+        for i in range(2, 7):
+            p = seletor(f"Jogador {i}", df_linha_tit, f"tit_{i}")
+            if p: lista.append({**p, "T": "TITULAR", "P": p.get('REG. POS.', 'N/A'), "K": f"tit_{i}"})
+            
+    with c_tit2:
+        for i in range(7, 12):
             p = seletor(f"Jogador {i}", df_linha_tit, f"tit_{i}")
             if p: lista.append({**p, "T": "TITULAR", "P": p.get('REG. POS.', 'N/A'), "K": f"tit_{i}"})
 
 with tab_res:
-    st.markdown("### 🧤 Goleiro Reserva (Obrigatório)")
-    gkr = seletor("Selecionar Goleiro", df_gk, "gk_res")
-    if gkr: lista.append({**gkr, "T": "RESERVA", "P": gkr.get('REG. POS.', 'GK'), "K": "gk_res"})
-    
-    st.markdown("---")
-    st.markdown("### 🏃 Reservas de Linha (4)")
-    
     allowed_res = render_position_filters("res")
     df_linha_res = df_all if not allowed_res else df_all[df_all['REG. POS.'].isin(allowed_res)]
     
     c_res1, c_res2 = st.columns(2)
-    for i in range(1, 5):
-        with (c_res1 if i <= 2 else c_res2):
+    with c_res1:
+        gkr = seletor("Reserva 1 (Goleiro)", df_gk, "gk_res")
+        if gkr: lista.append({**gkr, "T": "RESERVA", "P": gkr.get('REG. POS.', 'GK'), "K": "gk_res"})
+        
+        for i in range(2, 4):
+            p = seletor(f"Reserva {i}", df_linha_res, f"res_{i}")
+            if p: lista.append({**p, "T": "RESERVA", "P": p.get('REG. POS.', 'N/A'), "K": f"res_{i}"})
+            
+    with c_res2:
+        for i in range(4, 6):
             p = seletor(f"Reserva {i}", df_linha_res, f"res_{i}")
             if p: lista.append({**p, "T": "RESERVA", "P": p.get('REG. POS.', 'N/A'), "K": f"res_{i}"})
 
