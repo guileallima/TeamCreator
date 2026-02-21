@@ -169,7 +169,7 @@ st.markdown("---")
 # --- COMPONENTES AUXILIARES ---
 def format_func(row):
     if row is None: return "Selecionar..."
-    return f"ID: {row.get('INDEX','?')} | {row.get('NAME','?')} | OV: {row.get('OVERALL','?')} | €{row.get('MARKET PRICE',0):.1f}"
+    return f"{row.get('NAME','?')} | {row.get('REG. POS.','?')} | OV: {row.get('OVERALL','?')} | €{row.get('MARKET PRICE',0):.1f}"
 
 def seletor(label, df, key):
     escolha = st.session_state.escolhas.get(key)
@@ -457,7 +457,7 @@ if st.button("✅ ENVIAR INSCRIÇÃO", type="primary", use_container_width=True)
             
             # EMAIL
             msg = MIMEMultipart()
-            msg['From'], msg['To'] = EMAIL_REMETENTE, EMAIL_DESTINO
+            msg['From'], msg['To'] = EMAIL_REMETENTE, msg['To'] = EMAIL_DESTINO
             msg['Subject'] = f"Inscrição: {nome_time}"
             msg.attach(MIMEText(f"Nova inscrição recebida.\nTime: {nome_time}", 'plain'))
             
