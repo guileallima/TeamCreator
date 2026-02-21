@@ -97,9 +97,8 @@ st.markdown("""
     }
     [data-testid="stImage"] img { border-radius: 5px; }
     
-    /* Melhoria visual para o mini-card de stats */
     .mini-card-stats {
-        font-size: 0.8rem;
+        font-size: 0.75rem;
         color: #555;
         background-color: #f9f9f9;
         padding: 4px 8px;
@@ -177,9 +176,17 @@ def load_data_light():
             else:
                 df[c] = pd.to_numeric(df[c], errors='coerce').fillna(0.0)
         
-        for attr in ['ATTACK', 'DEFENCE', 'TOP SPEED', 'STAMINA']:
+        # Garante a existência de todas as colunas necessárias para os mini-cards dinâmicos
+        required_attrs = ['HEIGHT', 'ATTACK', 'DEFENCE', 'TOP SPEED', 'STAMINA', 'GOAL KEEPING SKILLS', 
+                          'RESPONSE', 'JUMP', 'BODY BALANCE', 'HEADER ACCURACY', 'LONG PASS ACCURACY', 
+                          'DRIBBLE SPEED', 'SHORT PASS ACCURACY', 'TENACITY', 'BALL CONTROLL', 
+                          'DRIBBLE ACCURACY', 'EXPLOSIVE POWER', 'SHOT ACCURACY', 'KICKING POWER']
+        
+        for attr in required_attrs:
             if attr not in df.columns:
-                df[attr] = '-'
+                df[attr] = 0 # Preenche com 0 para evitar erros se a coluna faltar no excel
+            else:
+                df[attr] = pd.to_numeric(df[attr], errors='coerce').fillna(0)
                 
         data_ui["Jogadores"] = df
         return data_ui
@@ -244,6 +251,12 @@ st.sidebar.subheader("🔍 Filtros de Jogadores")
 filtro_p = st.sidebar.number_input("Preço Máx. (€)", 0.0, 10000.0, ORCAMENTO_MAX, 10.0, key="input_filter")
 filtro_pais = st.sidebar.selectbox("Nacionalidade", opcoes_nacionalidade, index=1, key="input_pais")
 
+c_alt, c_vel = st.sidebar.columns(2)
+with c_alt:
+    filtro_alt = st.number_input("Altura Mín. (cm)", 100, 220, 150, 1, key="input_alt")
+with c_vel:
+    filtro_vel = st.number_input("Vel. Mínima", 40, 99, 40, 1, key="input_vel", help="Filtra por Top Speed")
+
 pos_selecionadas = st.sidebar.multiselect("Posição (Linha)", opcoes_pos, placeholder="Selecione as posições...", key="ms_pos")
 allowed_pos = []
 for p in pos_selecionadas:
@@ -251,7 +264,7 @@ for p in pos_selecionadas:
 
 hab_selecionadas = st.sidebar.multiselect("Características (Max 10)", opcoes_hab, max_selections=10, placeholder="Selecione estilos/cartões...", key="ms_hab")
 
-# --- DICIONÁRIO DE HABILIDADES (NOVO) ---
+# --- DICIONÁRIO DE HABILIDADES ---
 with st.sidebar.expander("📖 O que cada característica faz?"):
     st.markdown("**Estilo de Jogo (Playstyles)**")
     for h_nome, (_, desc) in PLAYSTYLES.items():
@@ -281,6 +294,9 @@ def seletor(label, df, key):
     usados = [v['NAME'] for k,v in st.session_state.escolhas.items() if v and k != key]
     
     mask = (df['MARKET PRICE'] <= (saldo + val_atual)) & (df['MARKET PRICE'] <= filtro_p)
+    mask = mask & (df['HEIGHT'] >= filtro_alt)
+    mask = mask & (df['TOP SPEED'] >= filtro_vel)
+    
     if filtro_pais != "Todos":
         mask = mask & (df['NATIONALITY'].astype(str).str.strip() == filtro_pais)
         
@@ -307,11 +323,32 @@ def seletor(label, df, key):
         new_sel = st.selectbox(label, ops, index=idx, format_func=format_func, key=f"s_{key}_{st.session_state.form_id}")
         
         if new_sel:
-            atq = new_sel.get('ATTACK', '-')
-            df_def = new_sel.get('DEFENCE', '-')
-            vel = new_sel.get('TOP SPEED', '-')
-            vig = new_sel.get('STAMINA', '-')
-            st.markdown(f"<div class='mini-card-stats'>⚔️ ATQ: {atq} | 🛡️ DEF: {df_def} | ⚡ VEL: {vel} | 🫁 VIG: {vig}</div>", unsafe_allow_html=True)
+            pos = new_sel.get('REG. POS.', '').strip().upper()
+            alt = int(new_sel.get('HEIGHT', 0)) if pd.notna(new_sel.get('HEIGHT')) else '-'
+            
+            def get_stat(col): 
+                val = new_sel.get(col, '-')
+                return int(val) if pd.notna(val) and isinstance(val, (int, float)) else val
+            
+            # Mini-cards dinâmicos por posição (+ Altura em todos)
+            if pos in ['GK']:
+                stats_str = f"📏 ALT: {alt}cm | 🧤 HAB: {get_stat('GOAL KEEPING SKILLS')} | ⚡ RES: {get_stat('RESPONSE')} | 🛡️ DEF: {get_stat('DEFENCE')} | 🦘 SAL: {get_stat('JUMP')} | ⚖️ EQU: {get_stat('BODY BALANCE')}"
+            elif pos in ['CB', 'SWP', 'D']:
+                stats_str = f"📏 ALT: {alt}cm | 🛡️ DEF: {get_stat('DEFENCE')} | 🗣️ CAB: {get_stat('HEADER ACCURACY')} | ⚖️ EQU: {get_stat('BODY BALANCE')} | 🦘 SAL: {get_stat('JUMP')} | ⚡ RES: {get_stat('RESPONSE')}"
+            elif pos in ['LB', 'LWB', 'RB', 'RWB', 'SB']:
+                stats_str = f"📏 ALT: {alt}cm | 🚀 V.MAX: {get_stat('TOP SPEED')} | 🫁 VIG: {get_stat('STAMINA')} | 🎯 P.LON: {get_stat('LONG PASS ACCURACY')} | 💨 V.DRI: {get_stat('DRIBBLE SPEED')} | 🛡️ DEF: {get_stat('DEFENCE')}"
+            elif pos in ['DMF']:
+                stats_str = f"📏 ALT: {alt}cm | 🛡️ DEF: {get_stat('DEFENCE')} | 👟 P.CUR: {get_stat('SHORT PASS ACCURACY')} | 🫁 VIG: {get_stat('STAMINA')} | ⚖️ EQU: {get_stat('BODY BALANCE')} | 😤 TEN: {get_stat('TENACITY')}"
+            elif pos in ['CMF', 'SMF', 'RMF', 'LMF', 'AMF', 'M', 'WB']:
+                stats_str = f"📏 ALT: {alt}cm | 👟 P.CUR: {get_stat('SHORT PASS ACCURACY')} | ⚽ C.BOL: {get_stat('BALL CONTROLL')} | 🪄 P.DRI: {get_stat('DRIBBLE ACCURACY')} | 🫁 VIG: {get_stat('STAMINA')} | ⚔️ ATQ: {get_stat('ATTACK')}"
+            elif pos in ['LWF', 'WF', 'RWF']:
+                stats_str = f"📏 ALT: {alt}cm | 🚀 V.MAX: {get_stat('TOP SPEED')} | 💨 V.DRI: {get_stat('DRIBBLE SPEED')} | 💥 EXP: {get_stat('EXPLOSIVE POWER')} | 🪄 P.DRI: {get_stat('DRIBBLE ACCURACY')} | ⚔️ ATQ: {get_stat('ATTACK')}"
+            elif pos in ['SS', 'CF', 'A']:
+                stats_str = f"📏 ALT: {alt}cm | ⚔️ ATQ: {get_stat('ATTACK')} | 🎯 P.CHU: {get_stat('SHOT ACCURACY')} | 💣 F.CHU: {get_stat('KICKING POWER')} | 🗣️ CAB: {get_stat('HEADER ACCURACY')} | 🚀 V.MAX: {get_stat('TOP SPEED')}"
+            else:
+                stats_str = f"📏 ALT: {alt}cm | ⚔️ ATQ: {get_stat('ATTACK')} | 🛡️ DEF: {get_stat('DEFENCE')} | 🚀 V.MAX: {get_stat('TOP SPEED')} | 🫁 VIG: {get_stat('STAMINA')}"
+            
+            st.markdown(f"<div class='mini-card-stats'>{stats_str}</div>", unsafe_allow_html=True)
             
     with c_num:
         val_n = st.session_state.numeros.get(key, 0)
