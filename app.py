@@ -79,7 +79,8 @@ def load_data_light():
     
     tabs = ['GK', 'DF', 'MF', 'FW']
     data_ui = {}
-    cols_ui = ['INDEX', 'NAME', 'MARKET PRICE', 'OVERALL', 'REG. POS.'] 
+    # Adicionado 'AGE' para carregar a idade
+    cols_ui = ['INDEX', 'NAME', 'MARKET PRICE', 'OVERALL', 'REG. POS.', 'AGE'] 
     
     try:
         for tab in tabs:
@@ -169,7 +170,13 @@ st.markdown("---")
 # --- COMPONENTES AUXILIARES ---
 def format_func(row):
     if row is None: return "Selecionar..."
-    return f"{row.get('NAME','?')} | {row.get('REG. POS.','?')} | OV: {row.get('OVERALL','?')} | €{row.get('MARKET PRICE',0):.1f}"
+    
+    # Extrai e formata a idade para remover casas decimais caso venha como float
+    idade = row.get('AGE', '?')
+    if pd.notna(idade) and isinstance(idade, (int, float)):
+        idade = int(idade)
+        
+    return f"{row.get('NAME','?')} | {row.get('REG. POS.','?')} | Idade: {idade} | OV: {row.get('OVERALL','?')} | €{row.get('MARKET PRICE',0):.1f}"
 
 def seletor(label, df, key):
     escolha = st.session_state.escolhas.get(key)
