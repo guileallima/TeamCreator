@@ -14,7 +14,7 @@ import re
 EMAIL_REMETENTE = "leallimagui@gmail.com" 
 SENHA_APP = "nmrytcivcuidhryn" 
 EMAIL_DESTINO = "leallimagui@gmail.com"
-ORCAMENTO_MAX = 50000.0
+ORCAMENTO_MAX = 5000.0
 
 OPCOES_CAMISAS = {f"Padrão {i}": f"uniforme{i}.jpg" for i in range(1, 8)}
 
@@ -34,9 +34,9 @@ POS_MAPPING = {
 st.set_page_config(page_title="Squad Builder PES 2013", layout="wide")
 
 # --- CSS PARA FORÇAR LAYOUT COMPACTO ---
+# Removi a linha que escondia os botões do stNumberInput para que o + e - apareçam
 st.markdown("""
 <style>
-    [data-testid="stNumberInput"] button {display: none;}
     .block-container {padding-top: 1rem; padding-bottom: 1rem;}
     .streamlit-expanderHeader {background-color: #f0f2f6; border-radius: 5px;}
     div[data-baseweb="color-picker"] {width: 100%;}
@@ -96,7 +96,7 @@ def load_data_light():
         
         if col_price:
             df['MARKET PRICE'] = df[col_price].astype(str).str.replace(r'[^\d.,]', '', regex=True).str.replace(',', '.')
-            df['MARKET PRICE'] = pd.to_numeric(df['MARKET PRICE'], errors='coerce').fillna(0.0)
+            df['MARKET PRICE'] = pd.to_numeric(df['MARKET PRICE'], errors='coerce').fillna(0.0) / 10.0
         else:
             df['MARKET PRICE'] = 0.0
             
@@ -176,7 +176,8 @@ st.markdown("---")
 with st.expander("🔍 Filtros de Jogadores", expanded=True):
     c_filt, c_pais = st.columns(2)
     with c_filt:
-        filtro_p = st.number_input("Preço Máx. (€)", 0.0, 100000.0, ORCAMENTO_MAX, 100.0, key="input_filter")
+        # Escondendo botões apenas do filtro de preço se quiser (opcional via CSS específico ou mantendo padrão do Streamlit)
+        filtro_p = st.number_input("Preço Máx. (€)", 0.0, 10000.0, ORCAMENTO_MAX, 10.0, key="input_filter")
     with c_pais:
         filtro_pais = st.selectbox("Nacionalidade", opcoes_nacionalidade, index=1, key="input_pais")
         
@@ -236,12 +237,18 @@ def seletor(label, df, key):
         for i, o in enumerate(ops): 
             if o and o['NAME'] == escolha['NAME']: idx = i; break
     
-    c_sel, c_num = st.columns([4, 1.2]) 
+    # Ajuste na largura das colunas para acomodar melhor os botões
+    c_sel, c_num = st.columns([3.5, 1.5]) 
     with c_sel:
         new_sel = st.selectbox(label, ops, index=idx, format_func=format_func, key=f"s_{key}_{st.session_state.form_id}")
     with c_num:
-        val_n = st.session_state.numeros.get(key, "")
-        new_n = st.text_input("Nº", value=val_n, max_chars=2, key=f"n_{key}_{st.session_state.form_id}")
+        # Alterado para number_input. O valor 0 será tratado como vazio na exportação.
+        val_n = st.session_state.numeros.get(key, 0)
+        # Se for string (de versões anteriores), tenta converter
+        if isinstance(val_n, str):
+             val_n = int(val_n) if val_n.isdigit() else 0
+        
+        new_n = st.number_input("Nº", min_value=0, max_value=99, value=val_n, step=1, key=f"n_{key}_{st.session_state.form_id}")
         st.session_state.numeros[key] = new_n
         
     if new_sel != escolha:
@@ -377,16 +384,18 @@ if st.button("✅ ENVIAR INSCRIÇÃO", type="primary", use_container_width=True)
             txt_content += "--- TITULARES ---\n"
             for p in lista:
                 if p['T'] == "TITULAR":
-                    num = st.session_state.numeros.get(p['K'], "")
+                    num = st.session_state.numeros.get(p['K'], 0)
+                    str_num = str(num) if num != 0 else ""
                     preco = p.get('MARKET PRICE', 0.0)
-                    txt_content += f"ID: {p['INDEX']} | Nº: {num} | {p['NAME']} | Preço: €{preco:.1f}\n"
+                    txt_content += f"ID: {p['INDEX']} | Nº: {str_num} | {p['NAME']} | Preço: €{preco:.1f}\n"
             
             txt_content += "\n--- RESERVAS ---\n"
             for p in lista:
                 if p['T'] == "RESERVA":
-                    num = st.session_state.numeros.get(p['K'], "")
+                    num = st.session_state.numeros.get(p['K'], 0)
+                    str_num = str(num) if num != 0 else ""
                     preco = p.get('MARKET PRICE', 0.0)
-                    txt_content += f"ID: {p['INDEX']} | Nº: {num} | {p['NAME']} | Preço: €{preco:.1f}\n"
+                    txt_content += f"ID: {p['INDEX']} | Nº: {str_num} | {p['NAME']} | Preço: €{preco:.1f}\n"
 
             # 2. GERAÇÃO DO PDF VISUAL
             pdf = FPDF()
@@ -451,13 +460,13 @@ if st.button("✅ ENVIAR INSCRIÇÃO", type="primary", use_container_width=True)
                 for p in lista:
                     if p['T'] == tipo_filtro:
                         n = str(p.get('NAME','')).encode('latin-1','ignore').decode('latin-1')
-                        raw_num = st.session_state.numeros.get(p['K'], "")
-                        num = int(raw_num) if raw_num.isdigit() else ""
+                        raw_num = st.session_state.numeros.get(p['K'], 0)
+                        str_num = str(raw_num) if raw_num != 0 else ""
                         ov = p.get('OVERALL', 0)
                         try: soma += float(ov); qtd += 1
                         except: pass
                         pdf.cell(20, 5, str(p['P']), 0, 0, 'C')
-                        pdf.cell(15, 5, str(num), 0, 0, 'C')
+                        pdf.cell(15, 5, str_num, 0, 0, 'C')
                         pdf.cell(125, 5, n, 0, 0, 'L')
                         pdf.set_font("Arial", 'B', 8)
                         pdf.cell(30, 5, str(ov), 0, 1, 'C')
