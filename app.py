@@ -16,7 +16,7 @@ import plotly.graph_objects as go
 EMAIL_REMETENTE = "leallimagui@gmail.com" 
 SENHA_APP = "nmrytcivcuidhryn" 
 EMAIL_DESTINO = "leallimagui@gmail.com"
-ORCAMENTO_MAX = 5000.0
+ORCAMENTO_MAX = 80000.0
 
 OPCOES_CAMISAS = {f"Padrão {i}": f"uniforme{i}.jpg" for i in range(1, 8)}
 
@@ -215,7 +215,7 @@ if data_ui is None:
 # Consolidação dos Dados e Preparação de Filtros
 df_all = data_ui["Jogadores"].copy()
 if 'REG. POS.' in df_all.columns:
-    df_all['REG. POS.'] = df_all['REG. POS.'].astype(str).str.strip().str.upper()
+    df_all['REG. POS.'].astype(str).str.strip().str.upper()
 else:
     df_all['REG. POS.'] = 'N/A'
 
@@ -266,7 +266,7 @@ st.sidebar.metric("Força Média (OVR)", f"{media_overall:.1f}", help="Média do
 st.sidebar.markdown("---")
 st.sidebar.subheader("🔍 Filtros de Jogadores")
 
-filtro_p = st.sidebar.number_input("Preço Máx. (€)", 0.0, 10000.0, ORCAMENTO_MAX, 100.0, key="input_filter")
+filtro_p = st.sidebar.number_input("Preço Máx. (€)", 0.0, 100000.0, ORCAMENTO_MAX, 100.0, key="input_filter")
 filtro_pais = st.sidebar.selectbox("Nacionalidade", opcoes_nacionalidade, index=1, key="input_pais")
 
 c_alt, c_vel = st.sidebar.columns(2)
@@ -333,7 +333,6 @@ def seletor(label, df, key):
     
     c_sel, c_num = st.columns([4.0, 1.0]) 
     with c_sel:
-        # Usando index=None para habilitar o 'X' nativo de remoção
         new_sel = st.selectbox(label, ops, index=idx, format_func=format_func, placeholder="Selecionar jogador...", key=f"s_{key}_{st.session_state.form_id}")
         
         if new_sel:
@@ -373,11 +372,10 @@ def seletor(label, df, key):
         new_n = st.number_input("Nº", min_value=0, max_value=99, value=val_n, step=1, key=f"n_{key}_{st.session_state.form_id}")
         st.session_state.numeros[key] = new_n
 
-    # Verificação de segurança à prova de falhas (IDs únicos) para evitar loop fantasma
     if get_id(new_sel) != get_id(escolha):
         st.session_state.escolhas[key] = new_sel
         if new_sel is None and key in st.session_state.numeros:
-            st.session_state.numeros[key] = 0 # Reseta o número quando o jogador é removido pelo X
+            st.session_state.numeros[key] = 0
         st.rerun()
         
     return new_sel
