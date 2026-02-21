@@ -258,14 +258,15 @@ with st.expander("🔍 Filtros Globais", expanded=True):
     
     chk_pos["Atacante"] = c3.checkbox("Atacante (CF, SS, A)", key="c_ata")
     chk_pos["Ponta Esquerda"] = c3.checkbox("Ponta Esq. (LWF, WF)", key="c_pe")
-    chk_pos["Ponta Direita"] = c3.checkbox("Ponta Dir. (RWF)", key="c_pd")
+    chk_pos["Ponta Direita"] = c3.checkbox("Ponta Direita (RWF)", key="c_pd")
 
     allowed_pos = []
     for k, is_chk in chk_pos.items():
         if is_chk: allowed_pos.extend(POS_MAPPING[k])
 
-    st.markdown("---")
-    st.markdown(f"**Características (Selecionadas: {len(st.session_state.hab_selecionadas)}/10)**")
+# --- FILTROS DE CARACTERÍSTICAS ---
+with st.expander("🃏 Filtros de Características", expanded=False):
+    st.markdown(f"**Escolha até 10 Características (Selecionadas: {len(st.session_state.hab_selecionadas)}/10)**")
     
     col_play, col_skill1, col_skill2 = st.columns(3)
     
