@@ -82,7 +82,7 @@ SKILLS = {
     "Arr. longo do gol": ("S26 GK LONG THROW", "Melhora o alcance dos arremessos do goleiro.")
 }
 
-st.set_page_config(page_title="Squad Builder PES 2013", layout="wide")
+st.set_page_config(page_title="Squad Builder PES 2013", layout="wide", initial_sidebar_state="expanded")
 
 # --- CSS PARA FORÇAR LAYOUT COMPACTO ---
 st.markdown("""
@@ -96,6 +96,19 @@ st.markdown("""
         width: 100% !important; border-radius: 4px; padding: 2px 0px !important; font-size: 0.8rem; margin-top: -5px;
     }
     [data-testid="stImage"] img { border-radius: 5px; }
+    
+    /* Melhoria visual para o mini-card de stats */
+    .mini-card-stats {
+        font-size: 0.8rem;
+        color: #555;
+        background-color: #f9f9f9;
+        padding: 4px 8px;
+        border-radius: 4px;
+        margin-top: -10px;
+        margin-bottom: 10px;
+        display: inline-block;
+        border: 1px solid #eee;
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -164,6 +177,11 @@ def load_data_light():
             else:
                 df[c] = pd.to_numeric(df[c], errors='coerce').fillna(0.0)
         
+        # Garante a existência de colunas para o mini-card
+        for attr in ['ATTACK', 'DEFENCE', 'TOP SPEED', 'STAMINA']:
+            if attr not in df.columns:
+                df[attr] = '-'
+                
         data_ui["Jogadores"] = df
         return data_ui
     except Exception as e:
@@ -186,7 +204,7 @@ else:
 
 df_gk = df_all[df_all['REG. POS.'] == 'GK']
 
-# --- PREPARAÇÃO DA LISTA DE PAÍSES ---
+# --- PREPARAÇÃO DAS LISTAS DE OPÇÕES ---
 lista_nacionalidades = []
 if 'NATIONALITY' in df_all.columns:
     lista_nacionalidades = df_all['NATIONALITY'].dropna().astype(str).str.strip().unique().tolist()
@@ -197,6 +215,8 @@ if br_str in lista_nacionalidades:
     lista_nacionalidades.remove(br_str)
 
 opcoes_nacionalidade = [br_str, "Todos"] + lista_nacionalidades
+opcoes_pos = list(POS_MAPPING.keys())
+opcoes_hab = list(PLAYSTYLES.keys()) + list(SKILLS.keys())
 
 # --- SESSÃO ---
 if 'escolhas' not in st.session_state: st.session_state.escolhas = {}
@@ -204,38 +224,33 @@ if 'numeros' not in st.session_state: st.session_state.numeros = {}
 if 'form_id' not in st.session_state: st.session_state.form_id = 0
 if 'uni_titular_sel' not in st.session_state: st.session_state.uni_titular_sel = "Padrão 1"
 if 'uni_reserva_sel' not in st.session_state: st.session_state.uni_reserva_sel = "Padrão 2"
-if 'hab_selecionadas' not in st.session_state: st.session_state.hab_selecionadas = []
 
 def reset_callback():
     st.session_state.escolhas = {}
     st.session_state.numeros = {}
-    st.session_state.hab_selecionadas = []
     st.session_state.form_id += 1
-
-def update_hab(h_name):
-    if h_name in st.session_state.hab_selecionadas:
-        st.session_state.hab_selecionadas.remove(h_name)
-    else:
-        if len(st.session_state.hab_selecionadas) < 10:
-            st.session_state.hab_selecionadas.append(h_name)
-        else:
-            st.toast("Você só pode escolher até 10 características.")
 
 custo_total = sum([p.get('MARKET PRICE', 0.0) for p in st.session_state.escolhas.values() if p])
 saldo = ORCAMENTO_MAX - custo_total
 
-# --- TÍTULO E PAINEL FINANCEIRO ---
-st.title("⚽ SQUAD BUILDER")
-st.markdown("### 💰 Painel Financeiro")
+# --- SIDEBAR (PAINEL FINANCEIRO & FILTROS) ---
+st.sidebar.title("💰 Painel Financeiro")
+st.sidebar.metric("Gasto Atual", f"€{custo_total:.0f}")
+st.sidebar.metric("Saldo Restante", f"€{saldo:.0f}")
+st.sidebar.progress(min(custo_total / ORCAMENTO_MAX, 1.0))
 
-c_gasto, c_saldo = st.columns(2)
-with c_gasto:
-    st.metric("Gasto Atual", f"€{custo_total:.0f}")
-with c_saldo:
-    st.metric("Saldo Restante", f"€{saldo:.0f}")
+st.sidebar.markdown("---")
+st.sidebar.subheader("🔍 Filtros de Jogadores")
 
-st.progress(min(custo_total / ORCAMENTO_MAX, 1.0))
-st.markdown("---")
+filtro_p = st.sidebar.number_input("Preço Máx. (€)", 0.0, 10000.0, ORCAMENTO_MAX, 10.0, key="input_filter")
+filtro_pais = st.sidebar.selectbox("Nacionalidade", opcoes_nacionalidade, index=1, key="input_pais")
+
+pos_selecionadas = st.sidebar.multiselect("Posição (Linha)", opcoes_pos, placeholder="Selecione as posições...", key="ms_pos")
+allowed_pos = []
+for p in pos_selecionadas:
+    allowed_pos.extend(POS_MAPPING[p])
+
+hab_selecionadas = st.sidebar.multiselect("Características (Max 10)", opcoes_hab, max_selections=10, placeholder="Selecione estilos/cartões...", key="ms_hab")
 
 # --- COMPONENTES AUXILIARES ---
 def format_func(row):
@@ -260,7 +275,7 @@ def seletor(label, df, key):
     if filtro_pais != "Todos":
         mask = mask & (df['NATIONALITY'].astype(str).str.strip() == filtro_pais)
         
-    for hab in st.session_state.hab_selecionadas:
+    for hab in hab_selecionadas:
         if hab in PLAYSTYLES:
             col_hab = PLAYSTYLES[hab][0]
         else:
@@ -281,6 +296,15 @@ def seletor(label, df, key):
     c_sel, c_num = st.columns([3.5, 1.5]) 
     with c_sel:
         new_sel = st.selectbox(label, ops, index=idx, format_func=format_func, key=f"s_{key}_{st.session_state.form_id}")
+        
+        # Exibe o mini-card de atributos se um jogador estiver selecionado
+        if new_sel:
+            atq = new_sel.get('ATTACK', '-')
+            df_def = new_sel.get('DEFENCE', '-')
+            vel = new_sel.get('TOP SPEED', '-')
+            vig = new_sel.get('STAMINA', '-')
+            st.markdown(f"<div class='mini-card-stats'>⚔️ ATQ: {atq} | 🛡️ DEF: {df_def} | ⚡ VEL: {vel} | 🫁 VIG: {vig}</div>", unsafe_allow_html=True)
+            
     with c_num:
         val_n = st.session_state.numeros.get(key, 0)
         if isinstance(val_n, str):
@@ -294,9 +318,13 @@ def seletor(label, df, key):
     return new_sel
 
 lista = []
+df_linha_filtrado = df_all if not allowed_pos else df_all[df_all['REG. POS.'].isin(allowed_pos)]
+
+# --- TÍTULO ---
+st.title("⚽ SQUAD BUILDER")
 
 # --- ABAS PRINCIPAIS ---
-tab_cad, tab_uni, tab_elenco = st.tabs(["📋 Cadastro", "👕 Uniformes", "👥 Elenco"])
+tab_cad, tab_uni, tab_elenco, tab_resumo = st.tabs(["📋 Cadastro", "👕 Uniformes", "👥 Elenco", "📊 Resumo"])
 
 with tab_cad:
     st.subheader("Dados da Inscrição")
@@ -363,69 +391,6 @@ with tab_uni:
     with tab_reserva_uni: kit_reserva = ui_uniforme("Reserva")
 
 with tab_elenco:
-    # --- FILTROS GLOBAIS ---
-    with st.expander("🔍 Filtros Globais", expanded=True):
-        c_filt, c_pais = st.columns(2)
-        with c_filt:
-            filtro_p = st.number_input("Preço Máx. (€)", 0.0, 10000.0, ORCAMENTO_MAX, 10.0, key="input_filter")
-        with c_pais:
-            filtro_pais = st.selectbox("Nacionalidade", opcoes_nacionalidade, index=1, key="input_pais")
-            
-        st.markdown("**Posição (Jogadores de Linha)**")
-        c1, c2, c3 = st.columns(3)
-        chk_pos = {}
-        chk_pos["Goleiro"] = c1.checkbox("Goleiro (GK)", key="c_gk")
-        chk_pos["Zagueiro"] = c1.checkbox("Zagueiro (CB, SWP, D)", key="c_cb")
-        chk_pos["Lateral Esquerdo"] = c1.checkbox("Lateral Esq. (LB, LWB)", key="c_le")
-        
-        chk_pos["Lateral Direito"] = c2.checkbox("Lateral Dir. (RB, RWB, SB)", key="c_ld")
-        chk_pos["Volante"] = c2.checkbox("Volante (DMF)", key="c_vol")
-        chk_pos["Meio Campo"] = c2.checkbox("Meio Campo (CMF, SMF...)", key="c_mc")
-        
-        chk_pos["Atacante"] = c3.checkbox("Atacante (CF, SS, A)", key="c_ata")
-        chk_pos["Ponta Esquerda"] = c3.checkbox("Ponta Esq. (LWF, WF)", key="c_pe")
-        chk_pos["Ponta Direita"] = c3.checkbox("Ponta Direita (RWF)", key="c_pd")
-
-        allowed_pos = []
-        for k, is_chk in chk_pos.items():
-            if is_chk: allowed_pos.extend(POS_MAPPING[k])
-
-    # --- FILTROS DE CARACTERÍSTICAS ---
-    with st.expander("🃏 Filtros de Características", expanded=False):
-        st.markdown(f"**Escolha até 10 Características (Selecionadas: {len(st.session_state.hab_selecionadas)}/10)**")
-        
-        col_play, col_skill1, col_skill2 = st.columns(3)
-        
-        with col_play:
-            st.markdown("*Estilo de Jogo*")
-            for h_nome, (col_name, tooltip) in PLAYSTYLES.items():
-                is_checked = h_nome in st.session_state.hab_selecionadas
-                if st.checkbox(h_nome, value=is_checked, help=tooltip, key=f"hab_{h_nome}"):
-                    if not is_checked: update_hab(h_nome); st.rerun()
-                else:
-                    if is_checked: update_hab(h_nome); st.rerun()
-
-        skills_items = list(SKILLS.items())
-        with col_skill1:
-            st.markdown("*Cartões (1-13)*")
-            for h_nome, (col_name, tooltip) in skills_items[:13]:
-                is_checked = h_nome in st.session_state.hab_selecionadas
-                if st.checkbox(h_nome, value=is_checked, help=tooltip, key=f"hab_{h_nome}"):
-                    if not is_checked: update_hab(h_nome); st.rerun()
-                else:
-                    if is_checked: update_hab(h_nome); st.rerun()
-
-        with col_skill2:
-            st.markdown("*Cartões (14-26)*")
-            for h_nome, (col_name, tooltip) in skills_items[13:]:
-                is_checked = h_nome in st.session_state.hab_selecionadas
-                if st.checkbox(h_nome, value=is_checked, help=tooltip, key=f"hab_{h_nome}"):
-                    if not is_checked: update_hab(h_nome); st.rerun()
-                else:
-                    if is_checked: update_hab(h_nome); st.rerun()
-
-    df_linha_filtrado = df_all if not allowed_pos else df_all[df_all['REG. POS.'].isin(allowed_pos)]
-
     with st.expander("🏟️ Titular", expanded=True):
         c_tit1, c_tit2 = st.columns(2)
         with c_tit1:
@@ -455,6 +420,22 @@ with tab_elenco:
             for i in range(4, 6):
                 p = seletor(f"Reserva {i}", df_linha_filtrado, f"res_{i}")
                 if p: lista.append({**p, "T": "RESERVA", "P": p.get('REG. POS.', 'N/A'), "K": f"res_{i}"})
+
+with tab_resumo:
+    st.subheader("Resumo da Escalacão")
+    if len(lista) > 0:
+        df_resumo = pd.DataFrame(lista)
+        df_resumo['Nº'] = [st.session_state.numeros.get(p['K'], 0) for p in lista]
+        df_resumo['PREÇO (€)'] = [f"€ {p.get('MARKET PRICE', 0.0):.1f}" for p in lista]
+        
+        # Reordenando as colunas e formatando para apresentação
+        colunas_exibicao = ['Nº', 'NAME', 'P', 'OVERALL', 'PREÇO (€)', 'T']
+        df_display = df_resumo[colunas_exibicao].copy()
+        df_display.rename(columns={'NAME': 'NOME', 'P': 'POSIÇÃO', 'T': 'STATUS'}, inplace=True)
+        
+        st.dataframe(df_display, use_container_width=True, hide_index=True)
+    else:
+        st.info("Nenhum jogador selecionado ainda. Vá na aba 'Elenco' para montar seu time.")
 
 st.markdown("---")
 if st.button("🔄 Limpar Tudo", use_container_width=True):
