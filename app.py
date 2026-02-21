@@ -32,7 +32,6 @@ POS_MAPPING = {
 }
 
 # --- DICIONÁRIOS DE HABILIDADES ---
-# Formato: { "Nome Amigável": ("Nome da Coluna no DF", "Descrição/Tooltip") }
 PLAYSTYLES = {
     "Clássico No. 10": ("P01 CLASSIC NO.10", "Jogador armador estático que faz bons passes em vez de manter um bom ritmo ou de movimentar-se muito."),
     "Primeiro Volante": ("P02 ANCHOR MAN", "Volante recuado que protege a defesa."),
@@ -131,15 +130,11 @@ def load_data_light():
     data_ui = {}
     
     try:
-        # Puxa a primeira (e única) aba do arquivo
         df = pd.read_excel(file_ui)
-        # Normaliza colunas para uppercase onde necessário (mas para P/S vamos usar os exatos extraídos)
         df_cols_upper = df.columns.str.strip().str.upper()
         
-        # Mapeamento dinâmico para evitar problemas de case nas colunas base
         col_map = {c_upper: c for c_upper, c in zip(df_cols_upper, df.columns)}
         
-        # IDs e Dados base
         col_id = col_map.get('INDEX', df.columns[0])
         col_name = col_map.get('NAME', 'NAME')
         col_nat = col_map.get('NATIONALITY', 'NATIONALITY')
@@ -153,7 +148,6 @@ def load_data_light():
                            
         df['INDEX'] = df['INDEX'].astype(str).str.strip()
         
-        # Preço
         if col_price in df.columns:
             df['MARKET PRICE'] = df[col_price].astype(str).str.replace(r'[^\d.,]', '', regex=True).str.replace(',', '.')
             df['MARKET PRICE'] = pd.to_numeric(df['MARKET PRICE'], errors='coerce').fillna(0.0) / 10.0
@@ -163,7 +157,6 @@ def load_data_light():
         if 'OVERALL' in df.columns:
             df.sort_values('OVERALL', ascending=False, inplace=True)
         
-        # Garantindo que as colunas de P/S existam (preenchendo com 0 caso faltem)
         all_skill_cols = [t[0] for t in PLAYSTYLES.values()] + [t[0] for t in SKILLS.values()]
         for c in all_skill_cols:
             if c not in df.columns:
@@ -245,31 +238,64 @@ st.progress(min(custo_total / ORCAMENTO_MAX, 1.0))
 st.markdown("---")
 
 # --- FILTROS GLOBAIS ---
-with st.expander("🔍 Filtros Globais (Preço, País, Posição)", expanded=True):
+with st.expander("🔍 Filtros Globais", expanded=True):
     c_filt, c_pais = st.columns(2)
     with c_filt:
         filtro_p = st.number_input("Preço Máx. (€)", 0.0, 10000.0, ORCAMENTO_MAX, 10.0, key="input_filter")
     with c_pais:
         filtro_pais = st.selectbox("Nacionalidade", opcoes_nacionalidade, index=1, key="input_pais")
         
-    st.markdown("**Filtrar por Posição (Jogadores de Linha)**")
+    st.markdown("**Posição (Jogadores de Linha)**")
     c1, c2, c3 = st.columns(3)
-    chk = {}
-    chk["Goleiro"] = c1.checkbox("Goleiro (GK)", key="c_gk")
-    chk["Zagueiro"] = c1.checkbox("Zagueiro (CB, SWP, D)", key="c_cb")
-    chk["Lateral Esquerdo"] = c1.checkbox("Lateral Esq. (LB, LWB)", key="c_le")
+    chk_pos = {}
+    chk_pos["Goleiro"] = c1.checkbox("Goleiro (GK)", key="c_gk")
+    chk_pos["Zagueiro"] = c1.checkbox("Zagueiro (CB, SWP, D)", key="c_cb")
+    chk_pos["Lateral Esquerdo"] = c1.checkbox("Lateral Esq. (LB, LWB)", key="c_le")
     
-    chk["Lateral Direito"] = c2.checkbox("Lateral Dir. (RB, RWB, SB)", key="c_ld")
-    chk["Volante"] = c2.checkbox("Volante (DMF)", key="c_vol")
-    chk["Meio Campo"] = c2.checkbox("Meio Campo (CMF, SMF...)", key="c_mc")
+    chk_pos["Lateral Direito"] = c2.checkbox("Lateral Dir. (RB, RWB, SB)", key="c_ld")
+    chk_pos["Volante"] = c2.checkbox("Volante (DMF)", key="c_vol")
+    chk_pos["Meio Campo"] = c2.checkbox("Meio Campo (CMF, SMF...)", key="c_mc")
     
-    chk["Atacante"] = c3.checkbox("Atacante (CF, SS, A)", key="c_ata")
-    chk["Ponta Esquerda"] = c3.checkbox("Ponta Esq. (LWF, WF)", key="c_pe")
-    chk["Ponta Direita"] = c3.checkbox("Ponta Dir. (RWF)", key="c_pd")
+    chk_pos["Atacante"] = c3.checkbox("Atacante (CF, SS, A)", key="c_ata")
+    chk_pos["Ponta Esquerda"] = c3.checkbox("Ponta Esq. (LWF, WF)", key="c_pe")
+    chk_pos["Ponta Direita"] = c3.checkbox("Ponta Dir. (RWF)", key="c_pd")
 
     allowed_pos = []
-    for k, is_chk in chk.items():
+    for k, is_chk in chk_pos.items():
         if is_chk: allowed_pos.extend(POS_MAPPING[k])
+
+    st.markdown("---")
+    st.markdown(f"**Características (Selecionadas: {len(st.session_state.hab_selecionadas)}/10)**")
+    
+    col_play, col_skill1, col_skill2 = st.columns(3)
+    
+    with col_play:
+        st.markdown("*Estilo de Jogo*")
+        for h_nome, (col_name, tooltip) in PLAYSTYLES.items():
+            is_checked = h_nome in st.session_state.hab_selecionadas
+            if st.checkbox(h_nome, value=is_checked, help=tooltip, key=f"hab_{h_nome}"):
+                if not is_checked: update_hab(h_nome); st.rerun()
+            else:
+                if is_checked: update_hab(h_nome); st.rerun()
+
+    skills_items = list(SKILLS.items())
+    with col_skill1:
+        st.markdown("*Cartões (1-13)*")
+        for h_nome, (col_name, tooltip) in skills_items[:13]:
+            is_checked = h_nome in st.session_state.hab_selecionadas
+            if st.checkbox(h_nome, value=is_checked, help=tooltip, key=f"hab_{h_nome}"):
+                if not is_checked: update_hab(h_nome); st.rerun()
+            else:
+                if is_checked: update_hab(h_nome); st.rerun()
+
+    with col_skill2:
+        st.markdown("*Cartões (14-26)*")
+        for h_nome, (col_name, tooltip) in skills_items[13:]:
+            is_checked = h_nome in st.session_state.hab_selecionadas
+            if st.checkbox(h_nome, value=is_checked, help=tooltip, key=f"hab_{h_nome}"):
+                if not is_checked: update_hab(h_nome); st.rerun()
+            else:
+                if is_checked: update_hab(h_nome); st.rerun()
 
 # --- COMPONENTES AUXILIARES ---
 def format_func(row):
@@ -290,12 +316,10 @@ def seletor(label, df, key):
     val_atual = escolha.get('MARKET PRICE', 0.0) if escolha else 0.0
     usados = [v['NAME'] for k,v in st.session_state.escolhas.items() if v and k != key]
     
-    # Filtro de Preço e Nacionalidade
     mask = (df['MARKET PRICE'] <= (saldo + val_atual)) & (df['MARKET PRICE'] <= filtro_p)
     if filtro_pais != "Todos":
         mask = mask & (df['NATIONALITY'].astype(str).str.strip() == filtro_pais)
         
-    # Filtro de Habilidades (DEVE TER TODAS as selecionadas)
     for hab in st.session_state.hab_selecionadas:
         if hab in PLAYSTYLES:
             col_hab = PLAYSTYLES[hab][0]
@@ -333,7 +357,7 @@ lista = []
 df_linha_filtrado = df_all if not allowed_pos else df_all[df_all['REG. POS.'].isin(allowed_pos)]
 
 # --- ABAS PRINCIPAIS ---
-tab_cad, tab_uni, tab_hab, tab_tit, tab_res = st.tabs(["📋 Cadastro", "👕 Uniformes", "🃏 Habilidades", "🏟️ Titulares", "✈️ Reservas"])
+tab_cad, tab_uni, tab_tit, tab_res = st.tabs(["📋 Cadastro", "👕 Uniformes", "🏟️ Titulares", "✈️ Reservas"])
 
 with tab_cad:
     st.subheader("Dados da Inscrição")
@@ -398,29 +422,6 @@ with tab_uni:
 
     with tab_titular_uni: kit_titular = ui_uniforme("Titular")
     with tab_reserva_uni: kit_reserva = ui_uniforme("Reserva")
-
-with tab_hab:
-    st.markdown(f"**Escolha até 10 Características (Selecionadas: {len(st.session_state.hab_selecionadas)}/10)**")
-    
-    col_play, col_skill = st.columns(2)
-    
-    with col_play:
-        st.subheader("Estilo de Jogo (Playstyles)")
-        for h_nome, (col_name, tooltip) in PLAYSTYLES.items():
-            is_checked = h_nome in st.session_state.hab_selecionadas
-            if st.checkbox(h_nome, value=is_checked, help=tooltip, key=f"hab_{h_nome}"):
-                if not is_checked: update_hab(h_nome); st.rerun()
-            else:
-                if is_checked: update_hab(h_nome); st.rerun()
-
-    with col_skill:
-        st.subheader("Cartões de Habilidade (Skills)")
-        for h_nome, (col_name, tooltip) in SKILLS.items():
-            is_checked = h_nome in st.session_state.hab_selecionadas
-            if st.checkbox(h_nome, value=is_checked, help=tooltip, key=f"hab_{h_nome}"):
-                if not is_checked: update_hab(h_nome); st.rerun()
-            else:
-                if is_checked: update_hab(h_nome); st.rerun()
 
 with tab_tit:
     c_tit1, c_tit2 = st.columns(2)
