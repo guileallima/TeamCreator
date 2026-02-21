@@ -31,10 +31,61 @@ POS_MAPPING = {
     "Ponta Direita": ["RWF"]
 }
 
+# --- DICIONÁRIOS DE HABILIDADES ---
+# Formato: { "Nome Amigável": ("Nome da Coluna no DF", "Descrição/Tooltip") }
+PLAYSTYLES = {
+    "Clássico No. 10": ("P01 CLASSIC NO.10", "Jogador armador estático que faz bons passes em vez de manter um bom ritmo ou de movimentar-se muito."),
+    "Primeiro Volante": ("P02 ANCHOR MAN", "Volante recuado que protege a defesa."),
+    "Malandro": ("P03 TRICKSTER", "Driblador Habilidoso que passa por cima dos adversários."),
+    "Pique": ("P04 DARTING RUN", "Jogador de bom ritmo que gosta de ir ao ataque."),
+    "Drible Veloz": ("P05 MAZING RUN", "Driblador habilidoso com movimentos rápidos que dão trabalho a qualquer defesa."),
+    "Passe Preciso": ("P06 PINPOINT PASS", "Especialista em lançamentos que pode fazer passes de qualidade de longas distâncias."),
+    "Cruz. Antecipado": ("P07 EARLY CROSS", "Jogador com ótima visão de jogo que não desperdiça cruzamentos antecipados."),
+    "Onipresente": ("P08 BOX TO BOX", "Jogador incansável que percorre o campo todo durante os 90 minutos."),
+    "Corrida Com Gás": ("P09 INCISIVE RUN", "Driblador especialista em abrir espaços para buscar oportunidades de gol."),
+    "Batedor Pró": ("P10 LONG RANGER", "Jogador que sempre chuta e sempre tenta criar espaços para chutes."),
+    "Raçudo": ("P11 ENFORCER", "Jogador robusto que dá combate e tem como único objetivo segurar o ataque adversário."),
+    "Artilheiro": ("P12 GOAL POACHER", "Artilheiro voraz que parte pra cima do último zagueiro."),
+    "Puxa Marcação": ("P13 DUMMY RUNNER", "Jogador que atrai a defesa para criar espaços a serem explorados por outros jogadores."),
+    "Flutuante": ("P14 FREE ROAMING", "Jogador com ótima visão de gol que avança em qualquer oportunidade."),
+    "Craque": ("P15 TALISMAN", "Craque que impulsiona todo o time a seguir em frente."),
+    "Homem de Área": ("P16 FOX IN THE BOX", "Artilheiro que fica na grande área esperando pela bola."),
+    "Defensor que Ataca": ("P17 OFFENSIVE SIDEBACK", "Jogador de defesa que gosta de avançar e surpreender a retaguarda adversária quando tem oportunidade."),
+    "Volta para Marcar": ("P18 TRACK BACK", "Jogador de ataque que pressiona ativamente a saída do adversário e tenta roubar a bola.")
+}
+
+SKILLS = {
+    "Toque de Primeira": ("S01 1-TOUCH PLAY", "Melhora o toque de primeira do jogador em passes e chutes."),
+    "Trivela": ("S02 OUTSIDE CURVE", "Melhora os toques com a parte externa do pé."),
+    "Arremesso Longo": ("S03 LONG THROW", "Aumenta o alcance dos arremessos laterais longos."),
+    "Super Substituto": ("S04 SUPER-SUB", "Aumenta o desempenho do jogador quando ele entra nos minutos finais."),
+    "Velocista": ("S05 SPEED MERCHANT", "Permite o giro especial em alta velocidade."),
+    "Chute de Longe": ("S06 LONG RANGE DRIVE", "Jogador cujos chutes a gol de longa distância perdem altura abruptamente. Um pesadelo para os goleiros."),
+    "Habil. Finta c/ Ombro": ("S07 SHOULDER FEINT SKILLS", "Melhora a técnica e a precisão na execução da finta Matthews e a finta de corpo."),
+    "Habil. de Giro": ("S08 TURNING SKILLS", "Melhora a técnica e a precisão na execução do giro de 180°."),
+    "Habil. Giro 360": ("S09 ROULETTE SKILLS", "Melhora a técnica e a precisão na execução do Marseille Roulette ou do giro em um pé só."),
+    "Habil. Elástico": ("S10 FLIP FLAP SKILLS", "Melhora a técnica e a precisão do elástico ou do elástico invertido."),
+    "Habil. Carretilha": ("S11 FLICKING SKILLS", "Melhora a técnica e a precisão para levantar a bola ou executar carretilha."),
+    "Habil. Pedalada": ("S12 SCISSORS SKILLS", "Melhora a técnica e a precisão na execução de passadas sobre a bola. Incluindo a passada sobre a bola simples e a passada sobre a bola para trás."),
+    "Habil. de Domínio": ("S13 STEP ON SKILLS", "Melhora a técnica e a precisão na execução de finta em L.giro com puxada para trás. Puxada para trás. Finta com o calcanhar e toques com a sola do pé."),
+    "Hab. de toque rápido": ("S14 DEFT TOUCH SKILLS", "Melhora a técnica e a precisão ao fazer a pedalada lateral e a pedalada lateral com toque."),
+    "Chute com o peito do pé": ("S15 KNUCKLE SHOT", "Melhora a precisão dos chutes com o peito do pé."),
+    "Chute com pulo": ("S16 JUMPING VOLLEY", "Às vezes o jogador tenta chutes de primeira com a bola no ar."),
+    "Voleio": ("S17 SCISSOR KICK", "Melhora o acerto do chute de voleio."),
+    "Toque de calcanhar": ("S18 HEEL FLICK", "Melhora a habilidade do jogador em chutes e passes com a bola no ar."),
+    "Passe com peso": ("S19 WEIGHTED PASS", "Aplica backspin na bola em passes longos e lançamentos pelo alto."),
+    "Toque duplo": ("S20 DOUBLE TOUCH", "Melhora a técnica e a precisão na execução do toque duplo."),
+    "Drible de vaca": ("S21 RUN AROUND", "Melhora a técnica e a precisão na execução do drible da vaca."),
+    "Chapéu": ("S22 SOMBRERO", "Melhora a técnica e precisão quando executa o chapéu."),
+    "Puxada em 180°": ("S23 180 DRAG", "Permite que o jogador use a parte de dentro do pé para driblar."),
+    "Desarme afastado": ("S24 LUNGING TACKLE", "Melhora a eficácia do desarme em velocidade."),
+    "Peixinho": ("S25 DIVING HEADER", "Às vezes o jogador pode tentar bloqueios um pouco diferentes."),
+    "Arr. longo do gol": ("S26 GK LONG THROW", "Melhora o alcance dos arremessos do goleiro.")
+}
+
 st.set_page_config(page_title="Squad Builder PES 2013", layout="wide")
 
 # --- CSS PARA FORÇAR LAYOUT COMPACTO ---
-# Removi a linha que escondia os botões do stNumberInput para que o + e - apareçam
 st.markdown("""
 <style>
     .block-container {padding-top: 1rem; padding-bottom: 1rem;}
@@ -73,44 +124,54 @@ def get_valid_images():
 
 @st.cache_data(show_spinner=False)
 def load_data_light():
-    file_ui = "jogadores.xlsx"
+    file_ui = "jogadoresdata.xlsx"
     if not os.path.exists(file_ui):
         return None
     
     data_ui = {}
-    cols_ui = ['INDEX', 'NAME', 'MARKET PRICE', 'OVERALL', 'REG. POS.', 'AGE', 'NATIONALITY'] 
     
     try:
-        df = pd.read_excel(file_ui, sheet_name="Jogadores")
-        df.columns = df.columns.str.strip().str.upper()
+        # Puxa a primeira (e única) aba do arquivo
+        df = pd.read_excel(file_ui)
+        # Normaliza colunas para uppercase onde necessário (mas para P/S vamos usar os exatos extraídos)
+        df_cols_upper = df.columns.str.strip().str.upper()
         
-        col_id = df.columns[0]
-        df.rename(columns={col_id: 'INDEX'}, inplace=True)
+        # Mapeamento dinâmico para evitar problemas de case nas colunas base
+        col_map = {c_upper: c for c_upper, c in zip(df_cols_upper, df.columns)}
+        
+        # IDs e Dados base
+        col_id = col_map.get('INDEX', df.columns[0])
+        col_name = col_map.get('NAME', 'NAME')
+        col_nat = col_map.get('NATIONALITY', 'NATIONALITY')
+        col_age = col_map.get('AGE', 'AGE')
+        col_pos = col_map.get('POSITION', 'POSITION')
+        col_ov = col_map.get('OVERALL', 'overall')
+        col_price = col_map.get('MARKET PRICE', 'market price')
+
+        df.rename(columns={col_id: 'INDEX', col_name: 'NAME', col_nat: 'NATIONALITY', 
+                           col_age: 'AGE', col_pos: 'REG. POS.', col_ov: 'OVERALL'}, inplace=True)
+                           
         df['INDEX'] = df['INDEX'].astype(str).str.strip()
         
-        col_price = None
-        for c in ['MARKET PRICE', 'MARKET VALUE (M€)', 'MARKET VALUE', 'VALUE', 'PRICE']:
-            if c in df.columns: 
-                col_price = c
-                break
-        
-        if col_price:
+        # Preço
+        if col_price in df.columns:
             df['MARKET PRICE'] = df[col_price].astype(str).str.replace(r'[^\d.,]', '', regex=True).str.replace(',', '.')
             df['MARKET PRICE'] = pd.to_numeric(df['MARKET PRICE'], errors='coerce').fillna(0.0) / 10.0
         else:
             df['MARKET PRICE'] = 0.0
             
-        if 'OVERALL' not in df.columns and len(df.columns) > 2:
-             df['OVERALL'] = df.iloc[:, 2]
+        if 'OVERALL' in df.columns:
+            df.sort_values('OVERALL', ascending=False, inplace=True)
         
-        cols_final = [c for c in cols_ui if c in df.columns]
-        df_lean = df[cols_final].copy()
+        # Garantindo que as colunas de P/S existam (preenchendo com 0 caso faltem)
+        all_skill_cols = [t[0] for t in PLAYSTYLES.values()] + [t[0] for t in SKILLS.values()]
+        for c in all_skill_cols:
+            if c not in df.columns:
+                df[c] = 0.0
+            else:
+                df[c] = pd.to_numeric(df[c], errors='coerce').fillna(0.0)
         
-        if 'OVERALL' in df_lean.columns:
-            df_lean.sort_values('OVERALL', ascending=False, inplace=True)
-        
-        data_ui["Jogadores"] = df_lean
-        
+        data_ui["Jogadores"] = df
         return data_ui
     except Exception as e:
         return None
@@ -120,7 +181,7 @@ data_ui = load_data_light()
 valid_images = get_valid_images()
 
 if data_ui is None:
-    st.error("Erro: 'jogadores.xlsx' não encontrado ou não possui a aba 'Jogadores'.")
+    st.error("Erro: 'jogadoresdata.xlsx' não encontrado ou formato inválido.")
     st.stop()
 
 # Consolidação dos Dados e Preparação de Filtros
@@ -150,11 +211,22 @@ if 'numeros' not in st.session_state: st.session_state.numeros = {}
 if 'form_id' not in st.session_state: st.session_state.form_id = 0
 if 'uni_titular_sel' not in st.session_state: st.session_state.uni_titular_sel = "Padrão 1"
 if 'uni_reserva_sel' not in st.session_state: st.session_state.uni_reserva_sel = "Padrão 2"
+if 'hab_selecionadas' not in st.session_state: st.session_state.hab_selecionadas = []
 
 def reset_callback():
     st.session_state.escolhas = {}
     st.session_state.numeros = {}
+    st.session_state.hab_selecionadas = []
     st.session_state.form_id += 1
+
+def update_hab(h_name):
+    if h_name in st.session_state.hab_selecionadas:
+        st.session_state.hab_selecionadas.remove(h_name)
+    else:
+        if len(st.session_state.hab_selecionadas) < 10:
+            st.session_state.hab_selecionadas.append(h_name)
+        else:
+            st.toast("Você só pode escolher até 10 características.")
 
 custo_total = sum([p.get('MARKET PRICE', 0.0) for p in st.session_state.escolhas.values() if p])
 saldo = ORCAMENTO_MAX - custo_total
@@ -173,10 +245,9 @@ st.progress(min(custo_total / ORCAMENTO_MAX, 1.0))
 st.markdown("---")
 
 # --- FILTROS GLOBAIS ---
-with st.expander("🔍 Filtros de Jogadores", expanded=True):
+with st.expander("🔍 Filtros Globais (Preço, País, Posição)", expanded=True):
     c_filt, c_pais = st.columns(2)
     with c_filt:
-        # Escondendo botões apenas do filtro de preço se quiser (opcional via CSS específico ou mantendo padrão do Streamlit)
         filtro_p = st.number_input("Preço Máx. (€)", 0.0, 10000.0, ORCAMENTO_MAX, 10.0, key="input_filter")
     with c_pais:
         filtro_pais = st.selectbox("Nacionalidade", opcoes_nacionalidade, index=1, key="input_pais")
@@ -200,8 +271,6 @@ with st.expander("🔍 Filtros de Jogadores", expanded=True):
     for k, is_chk in chk.items():
         if is_chk: allowed_pos.extend(POS_MAPPING[k])
 
-df_linha_filtrado = df_all if not allowed_pos else df_all[df_all['REG. POS.'].isin(allowed_pos)]
-
 # --- COMPONENTES AUXILIARES ---
 def format_func(row):
     if row is None: return "Selecionar..."
@@ -221,10 +290,18 @@ def seletor(label, df, key):
     val_atual = escolha.get('MARKET PRICE', 0.0) if escolha else 0.0
     usados = [v['NAME'] for k,v in st.session_state.escolhas.items() if v and k != key]
     
+    # Filtro de Preço e Nacionalidade
     mask = (df['MARKET PRICE'] <= (saldo + val_atual)) & (df['MARKET PRICE'] <= filtro_p)
-    
     if filtro_pais != "Todos":
         mask = mask & (df['NATIONALITY'].astype(str).str.strip() == filtro_pais)
+        
+    # Filtro de Habilidades (DEVE TER TODAS as selecionadas)
+    for hab in st.session_state.hab_selecionadas:
+        if hab in PLAYSTYLES:
+            col_hab = PLAYSTYLES[hab][0]
+        else:
+            col_hab = SKILLS[hab][0]
+        mask = mask & (df[col_hab] == 1)
         
     df_f = df[mask]
     if usados: df_f = df_f[~df_f['NAME'].isin(usados)]
@@ -237,17 +314,13 @@ def seletor(label, df, key):
         for i, o in enumerate(ops): 
             if o and o['NAME'] == escolha['NAME']: idx = i; break
     
-    # Ajuste na largura das colunas para acomodar melhor os botões
     c_sel, c_num = st.columns([3.5, 1.5]) 
     with c_sel:
         new_sel = st.selectbox(label, ops, index=idx, format_func=format_func, key=f"s_{key}_{st.session_state.form_id}")
     with c_num:
-        # Alterado para number_input. O valor 0 será tratado como vazio na exportação.
         val_n = st.session_state.numeros.get(key, 0)
-        # Se for string (de versões anteriores), tenta converter
         if isinstance(val_n, str):
              val_n = int(val_n) if val_n.isdigit() else 0
-        
         new_n = st.number_input("Nº", min_value=0, max_value=99, value=val_n, step=1, key=f"n_{key}_{st.session_state.form_id}")
         st.session_state.numeros[key] = new_n
         
@@ -257,9 +330,10 @@ def seletor(label, df, key):
     return new_sel
 
 lista = []
+df_linha_filtrado = df_all if not allowed_pos else df_all[df_all['REG. POS.'].isin(allowed_pos)]
 
 # --- ABAS PRINCIPAIS ---
-tab_cad, tab_uni, tab_tit, tab_res = st.tabs(["📋 Cadastro", "👕 Uniformes", "🏟️ Equipe Titular", "✈️ Equipe Reserva"])
+tab_cad, tab_uni, tab_hab, tab_tit, tab_res = st.tabs(["📋 Cadastro", "👕 Uniformes", "🃏 Habilidades", "🏟️ Titulares", "✈️ Reservas"])
 
 with tab_cad:
     st.subheader("Dados da Inscrição")
@@ -324,6 +398,29 @@ with tab_uni:
 
     with tab_titular_uni: kit_titular = ui_uniforme("Titular")
     with tab_reserva_uni: kit_reserva = ui_uniforme("Reserva")
+
+with tab_hab:
+    st.markdown(f"**Escolha até 10 Características (Selecionadas: {len(st.session_state.hab_selecionadas)}/10)**")
+    
+    col_play, col_skill = st.columns(2)
+    
+    with col_play:
+        st.subheader("Estilo de Jogo (Playstyles)")
+        for h_nome, (col_name, tooltip) in PLAYSTYLES.items():
+            is_checked = h_nome in st.session_state.hab_selecionadas
+            if st.checkbox(h_nome, value=is_checked, help=tooltip, key=f"hab_{h_nome}"):
+                if not is_checked: update_hab(h_nome); st.rerun()
+            else:
+                if is_checked: update_hab(h_nome); st.rerun()
+
+    with col_skill:
+        st.subheader("Cartões de Habilidade (Skills)")
+        for h_nome, (col_name, tooltip) in SKILLS.items():
+            is_checked = h_nome in st.session_state.hab_selecionadas
+            if st.checkbox(h_nome, value=is_checked, help=tooltip, key=f"hab_{h_nome}"):
+                if not is_checked: update_hab(h_nome); st.rerun()
+            else:
+                if is_checked: update_hab(h_nome); st.rerun()
 
 with tab_tit:
     c_tit1, c_tit2 = st.columns(2)
