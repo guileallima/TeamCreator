@@ -9,6 +9,8 @@ from email import encoders
 import tempfile
 import os
 import re
+import plotly.express as px
+import plotly.graph_objects as go
 
 # --- CONFIGURAÇÕES GERAIS ---
 EMAIL_REMETENTE = "leallimagui@gmail.com" 
@@ -29,6 +31,14 @@ POS_MAPPING = {
     "Atacante": ["SS", "CF", "A"],
     "Ponta Esquerda": ["LWF", "WF"],
     "Ponta Direita": ["RWF"]
+}
+
+# Mapeamento para Agrupamento Financeiro (Gráficos)
+SECTORS = {
+    'GK': 'Goleiro',
+    'CB': 'Defesa', 'SWP': 'Defesa', 'D': 'Defesa', 'LB': 'Defesa', 'LWB': 'Defesa', 'RB': 'Defesa', 'RWB': 'Defesa', 'SB': 'Defesa',
+    'DMF': 'Meio-Campo', 'CMF': 'Meio-Campo', 'SMF': 'Meio-Campo', 'RMF': 'Meio-Campo', 'LMF': 'Meio-Campo', 'AMF': 'Meio-Campo', 'M': 'Meio-Campo', 'WB': 'Meio-Campo',
+    'SS': 'Ataque', 'CF': 'Ataque', 'A': 'Ataque', 'LWF': 'Ataque', 'WF': 'Ataque', 'RWF': 'Ataque'
 }
 
 # --- DICIONÁRIOS DE HABILIDADES ---
@@ -126,6 +136,10 @@ def hex_to_rgb(hex_color):
     hex_color = hex_color.lstrip('#')
     return tuple(int(hex_color[i:i+2], 16) for i in (0, 2, 4))
 
+def get_num_stat(player, col_name):
+    try: return float(player.get(col_name, 0))
+    except: return 0.0
+
 @st.cache_data
 def get_valid_images():
     validas = {}
@@ -137,15 +151,12 @@ def get_valid_images():
 @st.cache_data(show_spinner=False)
 def load_data_light():
     file_ui = "jogadoresdata.xlsx"
-    if not os.path.exists(file_ui):
-        return None
-    
+    if not os.path.exists(file_ui): return None
     data_ui = {}
     
     try:
         df = pd.read_excel(file_ui)
         df_cols_upper = df.columns.str.strip().str.upper()
-        
         col_map = {c_upper: c for c_upper, c in zip(df_cols_upper, df.columns)}
         
         col_id = col_map.get('INDEX', df.columns[0])
@@ -172,10 +183,8 @@ def load_data_light():
         
         all_skill_cols = [t[0] for t in PLAYSTYLES.values()] + [t[0] for t in SKILLS.values()]
         for c in all_skill_cols:
-            if c not in df.columns:
-                df[c] = 0.0
-            else:
-                df[c] = pd.to_numeric(df[c], errors='coerce').fillna(0.0)
+            if c not in df.columns: df[c] = 0.0
+            else: df[c] = pd.to_numeric(df[c], errors='coerce').fillna(0.0)
         
         required_attrs = ['HEIGHT', 'ATTACK', 'DEFENCE', 'TOP SPEED', 'STAMINA', 'GOAL KEEPING SKILLS', 
                           'RESPONSE', 'JUMP', 'BODY BALANCE', 'HEADER ACCURACY', 'LONG PASS ACCURACY', 
@@ -183,10 +192,8 @@ def load_data_light():
                           'DRIBBLE ACCURACY', 'EXPLOSIVE POWER', 'SHOT ACCURACY', 'KICKING POWER']
         
         for attr in required_attrs:
-            if attr not in df.columns:
-                df[attr] = 0 
-            else:
-                df[attr] = pd.to_numeric(df[attr], errors='coerce').fillna(0)
+            if attr not in df.columns: df[attr] = 0 
+            else: df[attr] = pd.to_numeric(df[attr], errors='coerce').fillna(0)
                 
         data_ui["Jogadores"] = df
         return data_ui
@@ -250,7 +257,7 @@ m1.metric("Gasto Atual", f"€{custo_total:.0f}")
 m2.metric("Saldo Restante", f"€{saldo:.0f}")
 st.sidebar.progress(min(custo_total / ORCAMENTO_MAX, 1.0))
 
-st.sidebar.metric("Força Média (OVR)", f"{media_overall:.1f}", help="Média do overall de todos os jogadores selecionados (Titulares + Reservas)")
+st.sidebar.metric("Força Média (OVR)", f"{media_overall:.1f}", help="Média do overall de todos os jogadores selecionados")
 
 st.sidebar.markdown("---")
 st.sidebar.subheader("🔍 Filtros de Jogadores")
@@ -311,11 +318,9 @@ def seletor(label, df, key):
         
     ops = df_f.to_dict('records')
     
-    # Se já tem um escolhido que não bate mais no filtro, o incluímos para não quebrar o layout visual
     if escolha and escolha['NAME'] not in [o['NAME'] for o in ops]: 
         ops.insert(0, escolha)
     
-    # Busca o Index nativo
     idx = None
     if escolha:
         for i, o in enumerate(ops): 
@@ -324,7 +329,6 @@ def seletor(label, df, key):
     
     c_sel, c_num = st.columns([4.0, 1.0]) 
     with c_sel:
-        # index=None cria a opção de remover o jogador ("X" nativo do selectbox do Streamlit)
         new_sel = st.selectbox(label, ops, index=idx, format_func=format_func, placeholder="Selecionar jogador...", key=f"s_{key}_{st.session_state.form_id}")
         
         if new_sel:
@@ -472,7 +476,6 @@ with tab_elenco:
                 if p: lista.append({**p, "T": "RESERVA", "P": p.get('REG. POS.', 'N/A'), "K": f"res_{i}"})
 
 with tab_resumo:
-    # Lógica de Validação Tática baseada nos Titulares escolhidos
     titulares_selecionados = [p for p in lista if p['T'] == 'TITULAR']
     cat_counts = {'GK': 0, 'DEF': 0, 'MID': 0, 'ATQ': 0}
     
@@ -480,12 +483,22 @@ with tab_resumo:
     mid_pos = ['DMF', 'CMF', 'SMF', 'RMF', 'LMF', 'AMF', 'M', 'WB']
     atk_pos = ['SS', 'CF', 'A', 'LWF', 'WF', 'RWF']
     
+    # Orçamento por Setor (Titulares e Reservas)
+    gastos_setor = {'Goleiro': 0.0, 'Defesa': 0.0, 'Meio-Campo': 0.0, 'Ataque': 0.0}
+    
+    # Contagem para Tática (Apenas Titulares)
     for p in titulares_selecionados:
         pos_limpa = str(p.get('P', '')).strip().upper()
         if pos_limpa == 'GK': cat_counts['GK'] += 1
         elif pos_limpa in def_pos: cat_counts['DEF'] += 1
         elif pos_limpa in mid_pos: cat_counts['MID'] += 1
         elif pos_limpa in atk_pos: cat_counts['ATQ'] += 1
+        
+    for p in lista:
+        pos_limpa = str(p.get('P', '')).strip().upper()
+        preco = get_num_stat(p, 'MARKET PRICE')
+        setor = SECTORS.get(pos_limpa, 'Goleiro')
+        gastos_setor[setor] += preco
 
     partes_formacao = formacao.split('-')
     req_def, req_mid, req_atk = int(partes_formacao[0]), int(partes_formacao[1]), int(partes_formacao[2])
@@ -494,13 +507,76 @@ with tab_resumo:
     st.caption(f"Comparando seus jogadores escolhidos com a formação base selecionada: **{formacao}**")
     
     v1, v2, v3, v4 = st.columns(4)
-    v1.metric("Goleiro (Requisitado: 1)", f"{cat_counts['GK']} selecionado(s)", delta=cat_counts['GK']-1 if cat_counts['GK'] != 1 else None, delta_color="off")
+    v1.metric("Goleiro (Req: 1)", f"{cat_counts['GK']} selecionado(s)", delta=cat_counts['GK']-1 if cat_counts['GK'] != 1 else None, delta_color="off")
     v2.metric(f"Defensores (Req: {req_def})", f"{cat_counts['DEF']} selecionado(s)", delta=cat_counts['DEF']-req_def if cat_counts['DEF'] != req_def else None, delta_color="off")
     v3.metric(f"Meio-Campistas (Req: {req_mid})", f"{cat_counts['MID']} selecionado(s)", delta=cat_counts['MID']-req_mid if cat_counts['MID'] != req_mid else None, delta_color="off")
     v4.metric(f"Atacantes (Req: {req_atk})", f"{cat_counts['ATQ']} selecionado(s)", delta=cat_counts['ATQ']-req_atk if cat_counts['ATQ'] != req_atk else None, delta_color="off")
     
     st.markdown("---")
-    st.subheader("📊 Resumo da Escalacão")
+    
+    # --- GRÁFICOS DE ANÁLISE ---
+    st.subheader("📈 Análise do Elenco Titular")
+    if len(titulares_selecionados) > 0:
+        c_graf1, c_graf2 = st.columns(2)
+        
+        with c_graf1:
+            # Cálculo das Médias Específicas
+            avg_atk = sum([(get_num_stat(p, 'ATTACK') + get_num_stat(p, 'SHOT ACCURACY')) / 2 for p in titulares_selecionados]) / len(titulares_selecionados)
+            avg_def = sum([(get_num_stat(p, 'DEFENCE') + get_num_stat(p, 'RESPONSE')) / 2 for p in titulares_selecionados]) / len(titulares_selecionados)
+            avg_vel = sum([(get_num_stat(p, 'TOP SPEED') + get_num_stat(p, 'EXPLOSIVE POWER')) / 2 for p in titulares_selecionados]) / len(titulares_selecionados)
+            avg_fis = sum([(get_num_stat(p, 'BODY BALANCE') + get_num_stat(p, 'STAMINA')) / 2 for p in titulares_selecionados]) / len(titulares_selecionados)
+            avg_tec = sum([(get_num_stat(p, 'BALL CONTROLL') + get_num_stat(p, 'SHORT PASS ACCURACY')) / 2 for p in titulares_selecionados]) / len(titulares_selecionados)
+            
+            # Altura e Idade Média
+            avg_alt = sum([get_num_stat(p, 'HEIGHT') for p in titulares_selecionados]) / len(titulares_selecionados)
+            avg_idade = sum([get_num_stat(p, 'AGE') for p in titulares_selecionados]) / len(titulares_selecionados)
+            
+            st.markdown(f"**Estatísticas Médias Físicas:** <br>📏 Altura: {avg_alt:.0f}cm &nbsp;&nbsp;|&nbsp;&nbsp; 🎂 Idade: {avg_idade:.1f} anos", unsafe_allow_html=True)
+            
+            # Gráfico de Radar
+            categories = ['Ataque', 'Velocidade', 'Técnica', 'Físico', 'Defesa']
+            values = [avg_atk, avg_vel, avg_tec, avg_fis, avg_def]
+            # Fechando o ciclo do radar
+            values.append(values[0])
+            categories.append(categories[0])
+            
+            fig_radar = go.Figure()
+            fig_radar.add_trace(go.Scatterpolar(
+                r=values,
+                theta=categories,
+                fill='toself',
+                name='Titulares',
+                line_color='#0055aa'
+            ))
+            fig_radar.update_layout(
+                polar=dict(radialaxis=dict(visible=True, range=[0, 99])),
+                showlegend=False,
+                margin=dict(l=20, r=20, t=20, b=20),
+                height=300
+            )
+            st.plotly_chart(fig_radar, use_container_width=True)
+
+        with c_graf2:
+            st.markdown("**Distribuição de Orçamento por Setor**")
+            df_budget = pd.DataFrame({
+                'Setor': list(gastos_setor.keys()),
+                'Gasto (€)': list(gastos_setor.values())
+            })
+            # Remove setores com gasto 0 para o gráfico ficar mais limpo
+            df_budget = df_budget[df_budget['Gasto (€)'] > 0]
+            
+            if not df_budget.empty:
+                fig_pie = px.pie(df_budget, values='Gasto (€)', names='Setor', hole=0.4, 
+                                 color_discrete_sequence=px.colors.qualitative.Set2)
+                fig_pie.update_layout(margin=dict(l=20, r=20, t=20, b=20), height=300)
+                st.plotly_chart(fig_pie, use_container_width=True)
+            else:
+                st.info("Nenhum orçamento gasto ainda.")
+    else:
+        st.info("Adicione jogadores na aba 'Elenco' para ver os gráficos de análise.")
+
+    st.markdown("---")
+    st.subheader("📋 Tabela Geral do Plantel")
     if len(lista) > 0:
         df_resumo = pd.DataFrame(lista)
         df_resumo['Nº'] = [st.session_state.numeros.get(p['K'], 0) for p in lista]
@@ -510,7 +586,6 @@ with tab_resumo:
         df_display = df_resumo[colunas_exibicao].copy()
         df_display.rename(columns={'NAME': 'NOME', 'P': 'POSIÇÃO', 'T': 'STATUS'}, inplace=True)
         
-        # Tabela formatada garantindo que a coluna de preço continue ordenável e exiba o "€"
         st.dataframe(
             df_display, 
             use_container_width=True, 
@@ -520,7 +595,7 @@ with tab_resumo:
             }
         )
     else:
-        st.info("Nenhum jogador selecionado ainda. Vá na aba 'Elenco' para montar seu time.")
+        st.info("Lista de jogadores vazia.")
 
 st.markdown("---")
 if st.button("🔄 Limpar Tudo", use_container_width=True):
