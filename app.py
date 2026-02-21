@@ -237,67 +237,6 @@ with c_saldo:
 st.progress(min(custo_total / ORCAMENTO_MAX, 1.0))
 st.markdown("---")
 
-# --- FILTROS GLOBAIS ---
-with st.expander("🔍 Filtros Globais", expanded=True):
-    c_filt, c_pais = st.columns(2)
-    with c_filt:
-        filtro_p = st.number_input("Preço Máx. (€)", 0.0, 10000.0, ORCAMENTO_MAX, 10.0, key="input_filter")
-    with c_pais:
-        filtro_pais = st.selectbox("Nacionalidade", opcoes_nacionalidade, index=1, key="input_pais")
-        
-    st.markdown("**Posição (Jogadores de Linha)**")
-    c1, c2, c3 = st.columns(3)
-    chk_pos = {}
-    chk_pos["Goleiro"] = c1.checkbox("Goleiro (GK)", key="c_gk")
-    chk_pos["Zagueiro"] = c1.checkbox("Zagueiro (CB, SWP, D)", key="c_cb")
-    chk_pos["Lateral Esquerdo"] = c1.checkbox("Lateral Esq. (LB, LWB)", key="c_le")
-    
-    chk_pos["Lateral Direito"] = c2.checkbox("Lateral Dir. (RB, RWB, SB)", key="c_ld")
-    chk_pos["Volante"] = c2.checkbox("Volante (DMF)", key="c_vol")
-    chk_pos["Meio Campo"] = c2.checkbox("Meio Campo (CMF, SMF...)", key="c_mc")
-    
-    chk_pos["Atacante"] = c3.checkbox("Atacante (CF, SS, A)", key="c_ata")
-    chk_pos["Ponta Esquerda"] = c3.checkbox("Ponta Esq. (LWF, WF)", key="c_pe")
-    chk_pos["Ponta Direita"] = c3.checkbox("Ponta Direita (RWF)", key="c_pd")
-
-    allowed_pos = []
-    for k, is_chk in chk_pos.items():
-        if is_chk: allowed_pos.extend(POS_MAPPING[k])
-
-# --- FILTROS DE CARACTERÍSTICAS ---
-with st.expander("🃏 Filtros de Características", expanded=False):
-    st.markdown(f"**Escolha até 10 Características (Selecionadas: {len(st.session_state.hab_selecionadas)}/10)**")
-    
-    col_play, col_skill1, col_skill2 = st.columns(3)
-    
-    with col_play:
-        st.markdown("*Estilo de Jogo*")
-        for h_nome, (col_name, tooltip) in PLAYSTYLES.items():
-            is_checked = h_nome in st.session_state.hab_selecionadas
-            if st.checkbox(h_nome, value=is_checked, help=tooltip, key=f"hab_{h_nome}"):
-                if not is_checked: update_hab(h_nome); st.rerun()
-            else:
-                if is_checked: update_hab(h_nome); st.rerun()
-
-    skills_items = list(SKILLS.items())
-    with col_skill1:
-        st.markdown("*Cartões (1-13)*")
-        for h_nome, (col_name, tooltip) in skills_items[:13]:
-            is_checked = h_nome in st.session_state.hab_selecionadas
-            if st.checkbox(h_nome, value=is_checked, help=tooltip, key=f"hab_{h_nome}"):
-                if not is_checked: update_hab(h_nome); st.rerun()
-            else:
-                if is_checked: update_hab(h_nome); st.rerun()
-
-    with col_skill2:
-        st.markdown("*Cartões (14-26)*")
-        for h_nome, (col_name, tooltip) in skills_items[13:]:
-            is_checked = h_nome in st.session_state.hab_selecionadas
-            if st.checkbox(h_nome, value=is_checked, help=tooltip, key=f"hab_{h_nome}"):
-                if not is_checked: update_hab(h_nome); st.rerun()
-            else:
-                if is_checked: update_hab(h_nome); st.rerun()
-
 # --- COMPONENTES AUXILIARES ---
 def format_func(row):
     if row is None: return "Selecionar..."
@@ -355,10 +294,9 @@ def seletor(label, df, key):
     return new_sel
 
 lista = []
-df_linha_filtrado = df_all if not allowed_pos else df_all[df_all['REG. POS.'].isin(allowed_pos)]
 
 # --- ABAS PRINCIPAIS ---
-tab_cad, tab_uni, tab_tit, tab_res = st.tabs(["📋 Cadastro", "👕 Uniformes", "🏟️ Titulares", "✈️ Reservas"])
+tab_cad, tab_uni, tab_elenco = st.tabs(["📋 Cadastro", "👕 Uniformes", "👥 Elenco"])
 
 with tab_cad:
     st.subheader("Dados da Inscrição")
@@ -424,35 +362,99 @@ with tab_uni:
     with tab_titular_uni: kit_titular = ui_uniforme("Titular")
     with tab_reserva_uni: kit_reserva = ui_uniforme("Reserva")
 
-with tab_tit:
-    c_tit1, c_tit2 = st.columns(2)
-    with c_tit1:
-        gk = seletor("Jogador 1 (Goleiro)", df_gk, "gk_tit")
-        if gk: lista.append({**gk, "T": "TITULAR", "P": gk.get('REG. POS.', 'GK'), "K": "gk_tit"})
-        
-        for i in range(2, 7):
-            p = seletor(f"Jogador {i}", df_linha_filtrado, f"tit_{i}")
-            if p: lista.append({**p, "T": "TITULAR", "P": p.get('REG. POS.', 'N/A'), "K": f"tit_{i}"})
+with tab_elenco:
+    # --- FILTROS GLOBAIS ---
+    with st.expander("🔍 Filtros Globais", expanded=True):
+        c_filt, c_pais = st.columns(2)
+        with c_filt:
+            filtro_p = st.number_input("Preço Máx. (€)", 0.0, 10000.0, ORCAMENTO_MAX, 10.0, key="input_filter")
+        with c_pais:
+            filtro_pais = st.selectbox("Nacionalidade", opcoes_nacionalidade, index=1, key="input_pais")
             
-    with c_tit2:
-        for i in range(7, 12):
-            p = seletor(f"Jogador {i}", df_linha_filtrado, f"tit_{i}")
-            if p: lista.append({**p, "T": "TITULAR", "P": p.get('REG. POS.', 'N/A'), "K": f"tit_{i}"})
+        st.markdown("**Posição (Jogadores de Linha)**")
+        c1, c2, c3 = st.columns(3)
+        chk_pos = {}
+        chk_pos["Goleiro"] = c1.checkbox("Goleiro (GK)", key="c_gk")
+        chk_pos["Zagueiro"] = c1.checkbox("Zagueiro (CB, SWP, D)", key="c_cb")
+        chk_pos["Lateral Esquerdo"] = c1.checkbox("Lateral Esq. (LB, LWB)", key="c_le")
+        
+        chk_pos["Lateral Direito"] = c2.checkbox("Lateral Dir. (RB, RWB, SB)", key="c_ld")
+        chk_pos["Volante"] = c2.checkbox("Volante (DMF)", key="c_vol")
+        chk_pos["Meio Campo"] = c2.checkbox("Meio Campo (CMF, SMF...)", key="c_mc")
+        
+        chk_pos["Atacante"] = c3.checkbox("Atacante (CF, SS, A)", key="c_ata")
+        chk_pos["Ponta Esquerda"] = c3.checkbox("Ponta Esq. (LWF, WF)", key="c_pe")
+        chk_pos["Ponta Direita"] = c3.checkbox("Ponta Direita (RWF)", key="c_pd")
 
-with tab_res:
-    c_res1, c_res2 = st.columns(2)
-    with c_res1:
-        gkr = seletor("Reserva 1 (Goleiro)", df_gk, "gk_res")
-        if gkr: lista.append({**gkr, "T": "RESERVA", "P": gkr.get('REG. POS.', 'GK'), "K": "gk_res"})
+        allowed_pos = []
+        for k, is_chk in chk_pos.items():
+            if is_chk: allowed_pos.extend(POS_MAPPING[k])
+
+    # --- FILTROS DE CARACTERÍSTICAS ---
+    with st.expander("🃏 Filtros de Características", expanded=False):
+        st.markdown(f"**Escolha até 10 Características (Selecionadas: {len(st.session_state.hab_selecionadas)}/10)**")
         
-        for i in range(2, 4):
-            p = seletor(f"Reserva {i}", df_linha_filtrado, f"res_{i}")
-            if p: lista.append({**p, "T": "RESERVA", "P": p.get('REG. POS.', 'N/A'), "K": f"res_{i}"})
+        col_play, col_skill1, col_skill2 = st.columns(3)
+        
+        with col_play:
+            st.markdown("*Estilo de Jogo*")
+            for h_nome, (col_name, tooltip) in PLAYSTYLES.items():
+                is_checked = h_nome in st.session_state.hab_selecionadas
+                if st.checkbox(h_nome, value=is_checked, help=tooltip, key=f"hab_{h_nome}"):
+                    if not is_checked: update_hab(h_nome); st.rerun()
+                else:
+                    if is_checked: update_hab(h_nome); st.rerun()
+
+        skills_items = list(SKILLS.items())
+        with col_skill1:
+            st.markdown("*Cartões (1-13)*")
+            for h_nome, (col_name, tooltip) in skills_items[:13]:
+                is_checked = h_nome in st.session_state.hab_selecionadas
+                if st.checkbox(h_nome, value=is_checked, help=tooltip, key=f"hab_{h_nome}"):
+                    if not is_checked: update_hab(h_nome); st.rerun()
+                else:
+                    if is_checked: update_hab(h_nome); st.rerun()
+
+        with col_skill2:
+            st.markdown("*Cartões (14-26)*")
+            for h_nome, (col_name, tooltip) in skills_items[13:]:
+                is_checked = h_nome in st.session_state.hab_selecionadas
+                if st.checkbox(h_nome, value=is_checked, help=tooltip, key=f"hab_{h_nome}"):
+                    if not is_checked: update_hab(h_nome); st.rerun()
+                else:
+                    if is_checked: update_hab(h_nome); st.rerun()
+
+    df_linha_filtrado = df_all if not allowed_pos else df_all[df_all['REG. POS.'].isin(allowed_pos)]
+
+    with st.expander("🏟️ Titular", expanded=True):
+        c_tit1, c_tit2 = st.columns(2)
+        with c_tit1:
+            gk = seletor("Jogador 1 (Goleiro)", df_gk, "gk_tit")
+            if gk: lista.append({**gk, "T": "TITULAR", "P": gk.get('REG. POS.', 'GK'), "K": "gk_tit"})
             
-    with c_res2:
-        for i in range(4, 6):
-            p = seletor(f"Reserva {i}", df_linha_filtrado, f"res_{i}")
-            if p: lista.append({**p, "T": "RESERVA", "P": p.get('REG. POS.', 'N/A'), "K": f"res_{i}"})
+            for i in range(2, 7):
+                p = seletor(f"Jogador {i}", df_linha_filtrado, f"tit_{i}")
+                if p: lista.append({**p, "T": "TITULAR", "P": p.get('REG. POS.', 'N/A'), "K": f"tit_{i}"})
+                
+        with c_tit2:
+            for i in range(7, 12):
+                p = seletor(f"Jogador {i}", df_linha_filtrado, f"tit_{i}")
+                if p: lista.append({**p, "T": "TITULAR", "P": p.get('REG. POS.', 'N/A'), "K": f"tit_{i}"})
+
+    with st.expander("✈️ Reserva", expanded=False):
+        c_res1, c_res2 = st.columns(2)
+        with c_res1:
+            gkr = seletor("Reserva 1 (Goleiro)", df_gk, "gk_res")
+            if gkr: lista.append({**gkr, "T": "RESERVA", "P": gkr.get('REG. POS.', 'GK'), "K": "gk_res"})
+            
+            for i in range(2, 4):
+                p = seletor(f"Reserva {i}", df_linha_filtrado, f"res_{i}")
+                if p: lista.append({**p, "T": "RESERVA", "P": p.get('REG. POS.', 'N/A'), "K": f"res_{i}"})
+                
+        with c_res2:
+            for i in range(4, 6):
+                p = seletor(f"Reserva {i}", df_linha_filtrado, f"res_{i}")
+                if p: lista.append({**p, "T": "RESERVA", "P": p.get('REG. POS.', 'N/A'), "K": f"res_{i}"})
 
 st.markdown("---")
 if st.button("🔄 Limpar Tudo", use_container_width=True):
