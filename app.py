@@ -248,14 +248,14 @@ st.sidebar.progress(min(custo_total / ORCAMENTO_MAX, 1.0))
 st.sidebar.markdown("---")
 st.sidebar.subheader("🔍 Filtros de Jogadores")
 
-filtro_p = st.sidebar.number_input("Preço Máx. (€)", 0.0, 10000.0, ORCAMENTO_MAX, 10.0, key="input_filter")
+filtro_p = st.sidebar.number_input("Preço Máx. (€)", 0.0, 10000.0, ORCAMENTO_MAX, 100.0, key="input_filter")
 filtro_pais = st.sidebar.selectbox("Nacionalidade", opcoes_nacionalidade, index=1, key="input_pais")
 
 c_alt, c_vel = st.sidebar.columns(2)
 with c_alt:
-    filtro_alt = st.number_input("Altura Mín. (cm)", 100, 220, 150, 1, key="input_alt")
+    filtro_alt = st.number_input("Altura Mín. (cm)", 100, 220, 150, 5, key="input_alt")
 with c_vel:
-    filtro_vel = st.number_input("Vel. Mínima", 40, 99, 40, 1, key="input_vel", help="Filtra por Top Speed")
+    filtro_vel = st.number_input("Vel. Mínima", 40, 99, 40, 5, key="input_vel", help="Filtra por Top Speed")
 
 pos_selecionadas = st.sidebar.multiselect("Posição (Linha)", opcoes_pos, placeholder="Selecione as posições...", key="ms_pos")
 allowed_pos = []
@@ -292,6 +292,7 @@ def seletor(label, df, key):
     val_atual = escolha.get('MARKET PRICE', 0.0) if escolha else 0.0
     usados = [v['NAME'] for k,v in st.session_state.escolhas.items() if v and k != key]
     
+    # Restrição baseada no saldo disponível somado ao valor já empenhado na vaga atual
     mask = (df['MARKET PRICE'] <= (saldo + val_atual)) & (df['MARKET PRICE'] <= filtro_p)
     mask = mask & (df['HEIGHT'] >= filtro_alt)
     mask = mask & (df['TOP SPEED'] >= filtro_vel)
@@ -317,7 +318,7 @@ def seletor(label, df, key):
         for i, o in enumerate(ops): 
             if o and o['NAME'] == escolha['NAME']: idx = i; break
     
-    c_sel, c_num = st.columns([3.5, 1.5]) 
+    c_sel, c_num, c_btn = st.columns([5.5, 1.5, 1.0]) 
     with c_sel:
         new_sel = st.selectbox(label, ops, index=idx, format_func=format_func, key=f"s_{key}_{st.session_state.form_id}")
         
@@ -355,7 +356,6 @@ def seletor(label, df, key):
             
             habs_str = " | ".join(habs_ativas) if habs_ativas else "Nenhuma"
             
-            # Mostrando tudo no Card
             st.markdown(f"""
                 <div class='mini-card-stats'>
                     <b>Atributos:</b> {stats_str}<br>
@@ -369,6 +369,14 @@ def seletor(label, df, key):
              val_n = int(val_n) if val_n.isdigit() else 0
         new_n = st.number_input("Nº", min_value=0, max_value=99, value=val_n, step=1, key=f"n_{key}_{st.session_state.form_id}")
         st.session_state.numeros[key] = new_n
+
+    with c_btn:
+        st.markdown("<div style='margin-top: 27px;'></div>", unsafe_allow_html=True)
+        if st.button("🗑️", key=f"rm_{key}_{st.session_state.form_id}", help="Remover"):
+            st.session_state.escolhas[key] = None
+            if key in st.session_state.numeros:
+                st.session_state.numeros[key] = 0
+            st.rerun()
         
     if new_sel != escolha:
         st.session_state.escolhas[key] = new_sel
