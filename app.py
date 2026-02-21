@@ -81,7 +81,6 @@ def load_data_light():
     cols_ui = ['INDEX', 'NAME', 'MARKET PRICE', 'OVERALL', 'REG. POS.', 'AGE', 'NATIONALITY'] 
     
     try:
-        # Lê apenas a aba "Jogadores"
         df = pd.read_excel(file_ui, sheet_name="Jogadores")
         df.columns = df.columns.str.strip().str.upper()
         
@@ -133,6 +132,19 @@ else:
 
 df_gk = df_all[df_all['REG. POS.'] == 'GK']
 
+# --- PREPARAÇÃO DA LISTA DE PAÍSES ---
+lista_nacionalidades = []
+if 'NATIONALITY' in df_all.columns:
+    lista_nacionalidades = df_all['NATIONALITY'].dropna().astype(str).str.strip().unique().tolist()
+    lista_nacionalidades = sorted([n for n in lista_nacionalidades if n])
+
+# Identifica o nome do Brasil na planilha (pode estar "Brasil" ou "Brazil")
+br_str = next((n for n in lista_nacionalidades if n.upper() in ['BRASIL', 'BRAZIL']), 'Brasil')
+if br_str in lista_nacionalidades:
+    lista_nacionalidades.remove(br_str)
+
+opcoes_nacionalidade = [br_str, "Todos"] + lista_nacionalidades
+
 # --- SESSÃO ---
 if 'escolhas' not in st.session_state: st.session_state.escolhas = {}
 if 'numeros' not in st.session_state: st.session_state.numeros = {}
@@ -150,11 +162,14 @@ saldo = ORCAMENTO_MAX - custo_total
 
 # --- TÍTULO E PAINEL FINANCEIRO ---
 st.title("⚽ SQUAD BUILDER")
-st.markdown("### 💰 Painel Financeiro")
+st.markdown("### 💰 Painel Financeiro & Filtros")
 
-c_filt, c_gasto, c_saldo = st.columns([1, 1, 1])
+c_filt, c_pais, c_gasto, c_saldo = st.columns([1, 1, 1, 1])
 with c_filt:
-    filtro_p = st.number_input("Preço Máx. por Jogador (€)", 0.0, 100000.0, ORCAMENTO_MAX, 100.0, key="input_filter")
+    filtro_p = st.number_input("Preço Máx. (€)", 0.0, 100000.0, ORCAMENTO_MAX, 100.0, key="input_filter")
+with c_pais:
+    # Index 1 faz o padrão ser "Todos"
+    filtro_pais = st.selectbox("Nacionalidade", opcoes_nacionalidade, index=1, key="input_pais")
 with c_gasto:
     st.metric("Gasto Atual", f"€{custo_total:.0f}")
 with c_saldo:
@@ -183,10 +198,17 @@ def seletor(label, df, key):
     usados = [v['NAME'] for k,v in st.session_state.escolhas.items() if v and k != key]
     
     mask = (df['MARKET PRICE'] <= (saldo + val_atual)) & (df['MARKET PRICE'] <= filtro_p)
+    
+    # Aplica o filtro de país, se não for "Todos"
+    if filtro_pais != "Todos":
+        mask = mask & (df['NATIONALITY'].astype(str).str.strip() == filtro_pais)
+        
     df_f = df[mask]
     if usados: df_f = df_f[~df_f['NAME'].isin(usados)]
         
     ops = [None] + df_f.to_dict('records')
+    
+    # Mantém a escolha atual visível mesmo se não bater com o filtro (para não quebrar escolhas passadas)
     if escolha and escolha['NAME'] not in [o['NAME'] for o in ops if o]: ops.insert(1, escolha)
     
     idx = 0
