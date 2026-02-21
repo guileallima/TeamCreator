@@ -99,14 +99,15 @@ st.markdown("""
     
     .mini-card-stats {
         font-size: 0.75rem;
-        color: #555;
+        color: #444;
         background-color: #f9f9f9;
-        padding: 4px 8px;
+        padding: 6px 10px;
         border-radius: 4px;
         margin-top: -10px;
         margin-bottom: 10px;
-        display: inline-block;
-        border: 1px solid #eee;
+        display: block;
+        border: 1px solid #ddd;
+        line-height: 1.4;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -176,7 +177,6 @@ def load_data_light():
             else:
                 df[c] = pd.to_numeric(df[c], errors='coerce').fillna(0.0)
         
-        # Garante a existência de todas as colunas necessárias para os mini-cards dinâmicos
         required_attrs = ['HEIGHT', 'ATTACK', 'DEFENCE', 'TOP SPEED', 'STAMINA', 'GOAL KEEPING SKILLS', 
                           'RESPONSE', 'JUMP', 'BODY BALANCE', 'HEADER ACCURACY', 'LONG PASS ACCURACY', 
                           'DRIBBLE SPEED', 'SHORT PASS ACCURACY', 'TENACITY', 'BALL CONTROLL', 
@@ -184,7 +184,7 @@ def load_data_light():
         
         for attr in required_attrs:
             if attr not in df.columns:
-                df[attr] = 0 # Preenche com 0 para evitar erros se a coluna faltar no excel
+                df[attr] = 0 
             else:
                 df[attr] = pd.to_numeric(df[attr], errors='coerce').fillna(0)
                 
@@ -264,7 +264,6 @@ for p in pos_selecionadas:
 
 hab_selecionadas = st.sidebar.multiselect("Características (Max 10)", opcoes_hab, max_selections=10, placeholder="Selecione estilos/cartões...", key="ms_hab")
 
-# --- DICIONÁRIO DE HABILIDADES ---
 with st.sidebar.expander("📖 O que cada característica faz?"):
     st.markdown("**Estilo de Jogo (Playstyles)**")
     for h_nome, (_, desc) in PLAYSTYLES.items():
@@ -330,7 +329,7 @@ def seletor(label, df, key):
                 val = new_sel.get(col, '-')
                 return int(val) if pd.notna(val) and isinstance(val, (int, float)) else val
             
-            # Mini-cards dinâmicos por posição (+ Altura em todos)
+            # --- ATRIBUTOS PRINCIPAIS ---
             if pos in ['GK']:
                 stats_str = f"📏 ALT: {alt}cm | 🧤 HAB: {get_stat('GOAL KEEPING SKILLS')} | ⚡ RES: {get_stat('RESPONSE')} | 🛡️ DEF: {get_stat('DEFENCE')} | 🦘 SAL: {get_stat('JUMP')} | ⚖️ EQU: {get_stat('BODY BALANCE')}"
             elif pos in ['CB', 'SWP', 'D']:
@@ -348,7 +347,21 @@ def seletor(label, df, key):
             else:
                 stats_str = f"📏 ALT: {alt}cm | ⚔️ ATQ: {get_stat('ATTACK')} | 🛡️ DEF: {get_stat('DEFENCE')} | 🚀 V.MAX: {get_stat('TOP SPEED')} | 🫁 VIG: {get_stat('STAMINA')}"
             
-            st.markdown(f"<div class='mini-card-stats'>{stats_str}</div>", unsafe_allow_html=True)
+            # --- CARTÕES DE HABILIDADE (S01-S26 e P01-P18) ---
+            habs_ativas = []
+            for h_nome, (col_name, _) in list(PLAYSTYLES.items()) + list(SKILLS.items()):
+                if new_sel.get(col_name) == 1:
+                    habs_ativas.append(h_nome)
+            
+            habs_str = " | ".join(habs_ativas) if habs_ativas else "Nenhuma"
+            
+            # Mostrando tudo no Card
+            st.markdown(f"""
+                <div class='mini-card-stats'>
+                    <b>Atributos:</b> {stats_str}<br>
+                    <span style='color:#0055aa;'><b>🃏 Cartões/Estilo:</b> {habs_str}</span>
+                </div>
+            """, unsafe_allow_html=True)
             
     with c_num:
         val_n = st.session_state.numeros.get(key, 0)
