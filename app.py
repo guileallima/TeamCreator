@@ -77,43 +77,41 @@ def load_data_light():
     if not os.path.exists(file_ui):
         return None
     
-    tabs = ['GK', 'DF', 'MF', 'FW']
     data_ui = {}
-    # Adicionado 'NATIONALITY' na extração de dados
     cols_ui = ['INDEX', 'NAME', 'MARKET PRICE', 'OVERALL', 'REG. POS.', 'AGE', 'NATIONALITY'] 
     
     try:
-        for tab in tabs:
-            df = pd.read_excel(file_ui, sheet_name=tab)
-            df.columns = df.columns.str.strip().str.upper()
+        # Lê apenas a aba "Jogadores"
+        df = pd.read_excel(file_ui, sheet_name="Jogadores")
+        df.columns = df.columns.str.strip().str.upper()
+        
+        col_id = df.columns[0]
+        df.rename(columns={col_id: 'INDEX'}, inplace=True)
+        df['INDEX'] = df['INDEX'].astype(str).str.strip()
+        
+        col_price = None
+        for c in ['MARKET PRICE', 'MARKET VALUE (M€)', 'MARKET VALUE', 'VALUE', 'PRICE']:
+            if c in df.columns: 
+                col_price = c
+                break
+        
+        if col_price:
+            df['MARKET PRICE'] = df[col_price].astype(str).str.replace(r'[^\d.,]', '', regex=True).str.replace(',', '.')
+            df['MARKET PRICE'] = pd.to_numeric(df['MARKET PRICE'], errors='coerce').fillna(0.0)
+        else:
+            df['MARKET PRICE'] = 0.0
             
-            col_id = df.columns[0]
-            df.rename(columns={col_id: 'INDEX'}, inplace=True)
-            df['INDEX'] = df['INDEX'].astype(str).str.strip()
-            
-            col_price = None
-            for c in ['MARKET PRICE', 'MARKET VALUE (M€)', 'MARKET VALUE', 'VALUE', 'PRICE']:
-                if c in df.columns: 
-                    col_price = c
-                    break
-            
-            if col_price:
-                df['MARKET PRICE'] = df[col_price].astype(str).str.replace(r'[^\d.,]', '', regex=True).str.replace(',', '.')
-                df['MARKET PRICE'] = pd.to_numeric(df['MARKET PRICE'], errors='coerce').fillna(0.0)
-            else:
-                df['MARKET PRICE'] = 0.0
-                
-            if 'OVERALL' not in df.columns and len(df.columns) > 2:
-                 df['OVERALL'] = df.iloc[:, 2]
-            
-            cols_final = [c for c in cols_ui if c in df.columns]
-            df_lean = df[cols_final].copy()
-            
-            if 'OVERALL' in df_lean.columns:
-                df_lean.sort_values('OVERALL', ascending=False, inplace=True)
-            
-            data_ui[tab] = df_lean
-            
+        if 'OVERALL' not in df.columns and len(df.columns) > 2:
+             df['OVERALL'] = df.iloc[:, 2]
+        
+        cols_final = [c for c in cols_ui if c in df.columns]
+        df_lean = df[cols_final].copy()
+        
+        if 'OVERALL' in df_lean.columns:
+            df_lean.sort_values('OVERALL', ascending=False, inplace=True)
+        
+        data_ui["Jogadores"] = df_lean
+        
         return data_ui
     except Exception as e:
         return None
@@ -123,19 +121,17 @@ data_ui = load_data_light()
 valid_images = get_valid_images()
 
 if data_ui is None:
-    st.error("Erro: 'jogadores.xlsx' não encontrado.")
+    st.error("Erro: 'jogadores.xlsx' não encontrado ou não possui a aba 'Jogadores'.")
     st.stop()
 
 # Consolidação dos Dados e Preparação de Filtros
-df_all = pd.concat(list(data_ui.values()), ignore_index=True)
+df_all = data_ui["Jogadores"].copy()
 if 'REG. POS.' in df_all.columns:
     df_all['REG. POS.'] = df_all['REG. POS.'].astype(str).str.strip().str.upper()
 else:
     df_all['REG. POS.'] = 'N/A'
 
 df_gk = df_all[df_all['REG. POS.'] == 'GK']
-if df_gk.empty and 'GK' in data_ui:
-    df_gk = data_ui['GK']
 
 # --- SESSÃO ---
 if 'escolhas' not in st.session_state: st.session_state.escolhas = {}
