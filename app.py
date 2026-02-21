@@ -177,7 +177,6 @@ def load_data_light():
             else:
                 df[c] = pd.to_numeric(df[c], errors='coerce').fillna(0.0)
         
-        # Garante a existência de colunas para o mini-card
         for attr in ['ATTACK', 'DEFENCE', 'TOP SPEED', 'STAMINA']:
             if attr not in df.columns:
                 df[attr] = '-'
@@ -252,6 +251,16 @@ for p in pos_selecionadas:
 
 hab_selecionadas = st.sidebar.multiselect("Características (Max 10)", opcoes_hab, max_selections=10, placeholder="Selecione estilos/cartões...", key="ms_hab")
 
+# --- DICIONÁRIO DE HABILIDADES (NOVO) ---
+with st.sidebar.expander("📖 O que cada característica faz?"):
+    st.markdown("**Estilo de Jogo (Playstyles)**")
+    for h_nome, (_, desc) in PLAYSTYLES.items():
+        st.markdown(f"<span style='font-size: 0.8rem;'><b>{h_nome}:</b> {desc}</span>", unsafe_allow_html=True)
+        
+    st.markdown("<br>**Cartões de Habilidade (Skills)**", unsafe_allow_html=True)
+    for h_nome, (_, desc) in SKILLS.items():
+        st.markdown(f"<span style='font-size: 0.8rem;'><b>{h_nome}:</b> {desc}</span>", unsafe_allow_html=True)
+
 # --- COMPONENTES AUXILIARES ---
 def format_func(row):
     if row is None: return "Selecionar..."
@@ -297,7 +306,6 @@ def seletor(label, df, key):
     with c_sel:
         new_sel = st.selectbox(label, ops, index=idx, format_func=format_func, key=f"s_{key}_{st.session_state.form_id}")
         
-        # Exibe o mini-card de atributos se um jogador estiver selecionado
         if new_sel:
             atq = new_sel.get('ATTACK', '-')
             df_def = new_sel.get('DEFENCE', '-')
@@ -428,7 +436,6 @@ with tab_resumo:
         df_resumo['Nº'] = [st.session_state.numeros.get(p['K'], 0) for p in lista]
         df_resumo['PREÇO (€)'] = [f"€ {p.get('MARKET PRICE', 0.0):.1f}" for p in lista]
         
-        # Reordenando as colunas e formatando para apresentação
         colunas_exibicao = ['Nº', 'NAME', 'P', 'OVERALL', 'PREÇO (€)', 'T']
         df_display = df_resumo[colunas_exibicao].copy()
         df_display.rename(columns={'NAME': 'NOME', 'P': 'POSIÇÃO', 'T': 'STATUS'}, inplace=True)
