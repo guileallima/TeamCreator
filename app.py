@@ -14,7 +14,7 @@ import re
 EMAIL_REMETENTE = "leallimagui@gmail.com" 
 SENHA_APP = "nmrytcivcuidhryn" 
 EMAIL_DESTINO = "leallimagui@gmail.com"
-ORCAMENTO_MAX = 2000.0
+ORCAMENTO_MAX = 20000.0
 
 OPCOES_CAMISAS = {f"Padrão {i}": f"uniforme{i}.jpg" for i in range(1, 8)}
 
@@ -476,4 +476,3 @@ if st.button("✅ ENVIAR INSCRIÇÃO", type="primary", use_container_width=True)
             st.error("Erro de Senha do E-mail.")
         except Exception as e:
             st.error(f"Erro: {e}")
-
