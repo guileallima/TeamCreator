@@ -140,6 +140,10 @@ def get_num_stat(player, col_name):
     try: return float(player.get(col_name, 0))
     except: return 0.0
 
+def get_id(player):
+    if not player: return None
+    return str(player.get('INDEX', ''))
+
 @st.cache_data
 def get_valid_images():
     validas = {}
@@ -324,11 +328,12 @@ def seletor(label, df, key):
     idx = None
     if escolha:
         for i, o in enumerate(ops): 
-            if o['NAME'] == escolha['NAME']: 
+            if get_id(o) == get_id(escolha): 
                 idx = i; break
     
     c_sel, c_num = st.columns([4.0, 1.0]) 
     with c_sel:
+        # Usando index=None para habilitar o 'X' nativo de remoção
         new_sel = st.selectbox(label, ops, index=idx, format_func=format_func, placeholder="Selecionar jogador...", key=f"s_{key}_{st.session_state.form_id}")
         
         if new_sel:
@@ -368,9 +373,13 @@ def seletor(label, df, key):
         new_n = st.number_input("Nº", min_value=0, max_value=99, value=val_n, step=1, key=f"n_{key}_{st.session_state.form_id}")
         st.session_state.numeros[key] = new_n
 
-    if new_sel != escolha:
+    # Verificação de segurança à prova de falhas (IDs únicos) para evitar loop fantasma
+    if get_id(new_sel) != get_id(escolha):
         st.session_state.escolhas[key] = new_sel
+        if new_sel is None and key in st.session_state.numeros:
+            st.session_state.numeros[key] = 0 # Reseta o número quando o jogador é removido pelo X
         st.rerun()
+        
     return new_sel
 
 lista = []
@@ -483,10 +492,8 @@ with tab_resumo:
     mid_pos = ['DMF', 'CMF', 'SMF', 'RMF', 'LMF', 'AMF', 'M', 'WB']
     atk_pos = ['SS', 'CF', 'A', 'LWF', 'WF', 'RWF']
     
-    # Orçamento por Setor (Titulares e Reservas)
     gastos_setor = {'Goleiro': 0.0, 'Defesa': 0.0, 'Meio-Campo': 0.0, 'Ataque': 0.0}
     
-    # Contagem para Tática (Apenas Titulares)
     for p in titulares_selecionados:
         pos_limpa = str(p.get('P', '')).strip().upper()
         if pos_limpa == 'GK': cat_counts['GK'] += 1
@@ -520,23 +527,19 @@ with tab_resumo:
         c_graf1, c_graf2 = st.columns(2)
         
         with c_graf1:
-            # Cálculo das Médias Específicas
             avg_atk = sum([(get_num_stat(p, 'ATTACK') + get_num_stat(p, 'SHOT ACCURACY')) / 2 for p in titulares_selecionados]) / len(titulares_selecionados)
             avg_def = sum([(get_num_stat(p, 'DEFENCE') + get_num_stat(p, 'RESPONSE')) / 2 for p in titulares_selecionados]) / len(titulares_selecionados)
             avg_vel = sum([(get_num_stat(p, 'TOP SPEED') + get_num_stat(p, 'EXPLOSIVE POWER')) / 2 for p in titulares_selecionados]) / len(titulares_selecionados)
             avg_fis = sum([(get_num_stat(p, 'BODY BALANCE') + get_num_stat(p, 'STAMINA')) / 2 for p in titulares_selecionados]) / len(titulares_selecionados)
             avg_tec = sum([(get_num_stat(p, 'BALL CONTROLL') + get_num_stat(p, 'SHORT PASS ACCURACY')) / 2 for p in titulares_selecionados]) / len(titulares_selecionados)
             
-            # Altura e Idade Média
             avg_alt = sum([get_num_stat(p, 'HEIGHT') for p in titulares_selecionados]) / len(titulares_selecionados)
             avg_idade = sum([get_num_stat(p, 'AGE') for p in titulares_selecionados]) / len(titulares_selecionados)
             
             st.markdown(f"**Estatísticas Médias Físicas:** <br>📏 Altura: {avg_alt:.0f}cm &nbsp;&nbsp;|&nbsp;&nbsp; 🎂 Idade: {avg_idade:.1f} anos", unsafe_allow_html=True)
             
-            # Gráfico de Radar
             categories = ['Ataque', 'Velocidade', 'Técnica', 'Físico', 'Defesa']
             values = [avg_atk, avg_vel, avg_tec, avg_fis, avg_def]
-            # Fechando o ciclo do radar
             values.append(values[0])
             categories.append(categories[0])
             
@@ -562,7 +565,6 @@ with tab_resumo:
                 'Setor': list(gastos_setor.keys()),
                 'Gasto (€)': list(gastos_setor.values())
             })
-            # Remove setores com gasto 0 para o gráfico ficar mais limpo
             df_budget = df_budget[df_budget['Gasto (€)'] > 0]
             
             if not df_budget.empty:
