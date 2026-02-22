@@ -35,6 +35,14 @@ POS_MAPPING = {
     "Ponta Direita": ["RWF"]
 }
 
+# Mapeamento para Agrupamento Financeiro (Gráficos)
+SECTORS = {
+    'GK': 'Goleiro',
+    'CB': 'Defesa', 'SWP': 'Defesa', 'D': 'Defesa', 'LB': 'Defesa', 'LWB': 'Defesa', 'RB': 'Defesa', 'RWB': 'Defesa', 'SB': 'Defesa',
+    'DMF': 'Meio-Campo', 'CMF': 'Meio-Campo', 'SMF': 'Meio-Campo', 'RMF': 'Meio-Campo', 'LMF': 'Meio-Campo', 'AMF': 'Meio-Campo', 'M': 'Meio-Campo', 'WB': 'Meio-Campo',
+    'SS': 'Ataque', 'CF': 'Ataque', 'A': 'Ataque', 'LWF': 'Ataque', 'WF': 'Ataque', 'RWF': 'Ataque'
+}
+
 # --- DICIONÁRIOS DE HABILIDADES ---
 PLAYSTYLES = {
     "Clássico No. 10": ("P01 CLASSIC NO.10", "Jogador armador estático que faz bons passes em vez de manter um bom ritmo ou de movimentar-se muito."),
@@ -251,6 +259,7 @@ custo_reserva = sum([p.get('MARKET PRICE', 0.0) for p in jogadores_reservas])
 saldo_titular = ORCAMENTO_TITULAR - custo_titular
 saldo_reserva = ORCAMENTO_RESERVA - custo_reserva
 
+# Flag de controle para travar envio caso passe dos limites
 estourou_orcamento = (saldo_titular < 0) or (saldo_reserva < 0)
 
 qtd_jogadores = len(todos_jogadores)
@@ -328,6 +337,7 @@ def render_progress_bar(label, value):
 
 def seletor(label, df, key, is_titular=True):
     escolha = st.session_state.escolhas.get(key)
+    
     usados_ids = [get_id(v) for k,v in st.session_state.escolhas.items() if v and k != key]
     
     mask = (df['MARKET PRICE'] <= filtro_p)
@@ -585,7 +595,7 @@ with tab_resumo:
             
             if not df_budget.empty:
                 df_budget.set_index('Setor', inplace=True)
-                st.bar_chart(df_budget, width="stretch", height=300)
+                st.bar_chart(df_budget, height=300, use_container_width=True)
             else:
                 st.info("Nenhum orçamento gasto ainda.")
     else:
@@ -594,12 +604,10 @@ with tab_resumo:
     st.markdown("---")
     st.subheader("📋 Tabela Geral do Plantel")
     if len(lista) > 0:
-        # Define a ordem de ordenação das posições (Goleiro -> Defesa -> Meio -> Ataque)
         pos_order = {'GK': 1, 'CB': 2, 'SWP': 2, 'D': 2, 'LB': 2, 'LWB': 2, 'RB': 2, 'RWB': 2, 'SB': 2,
                      'DMF': 3, 'CMF': 3, 'SMF': 3, 'RMF': 3, 'LMF': 3, 'AMF': 3, 'M': 3, 'WB': 3,
                      'SS': 4, 'CF': 4, 'A': 4, 'LWF': 4, 'WF': 4, 'RWF': 4}
         
-        # Ordena: Primeiro Titulares(0) depois Reservas(1) -> Posição -> Overall (do maior pro menor)
         lista_sorted = sorted(lista, key=lambda x: (
             0 if x['T'] == 'TITULAR' else 1,
             pos_order.get(str(x.get('P', '')).strip().upper(), 5),
@@ -613,7 +621,6 @@ with tab_resumo:
         df_resumo['ALTURA'] = [f"{int(get_num_stat(p, 'HEIGHT'))}cm" for p in lista_sorted]
         df_resumo['OVERALL'] = [int(get_num_stat(p, 'OVERALL')) for p in lista_sorted]
         
-        # Contagem de cartas (Playstyles e Skills)
         cartas_list = []
         for p in lista_sorted:
             c = sum(1 for h_nome, (col_name, _) in list(PLAYSTYLES.items()) + list(SKILLS.items()) if p.get(col_name) == 1)
@@ -624,7 +631,6 @@ with tab_resumo:
         df_display = df_resumo[colunas_exibicao].copy()
         df_display.rename(columns={'NAME': 'NOME', 'P': 'POSIÇÃO', 'T': 'STATUS'}, inplace=True)
         
-        # Aplica Heatmap na coluna de Overall (Verde = Alto, Amarelo = Médio, Vermelho = Baixo)
         styled_df = df_display.style.background_gradient(
             subset=['OVERALL'], 
             cmap='RdYlGn', 
@@ -636,21 +642,21 @@ with tab_resumo:
         
         st.dataframe(
             styled_df, 
-            width="stretch", 
-            height=620, # Tamanho fixo perfeito para os 16 jogadores sem gerar scroll duplo
+            use_container_width=True, 
+            height=620,
             hide_index=True
         )
     else:
         st.info("Lista de jogadores vazia.")
 
 st.markdown("---")
-if st.button("🔄 Limpar Tudo", width="stretch"):
+if st.button("🔄 Limpar Tudo", use_container_width=True):
     reset_callback()
     st.rerun()
 st.markdown("###")
 
 # --- EXPORTAÇÃO ---
-if st.button("✅ ENVIAR INSCRIÇÃO", type="primary", width="stretch", disabled=estourou_orcamento):
+if st.button("✅ ENVIAR INSCRIÇÃO", type="primary", use_container_width=True, disabled=estourou_orcamento):
     erros = []
     if not int1: erros.append("Jogador 1")
     if not int2: erros.append("Jogador 2")
