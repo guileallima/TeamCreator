@@ -16,7 +16,9 @@ import plotly.graph_objects as go
 EMAIL_REMETENTE = "leallimagui@gmail.com" 
 SENHA_APP = "nmrytcivcuidhryn" 
 EMAIL_DESTINO = "leallimagui@gmail.com"
-ORCAMENTO_MAX = 80000.0
+ORCAMENTO_TOTAL = 60000.0
+ORCAMENTO_TITULAR = 45000.0
+ORCAMENTO_RESERVA = 15000.0
 
 OPCOES_CAMISAS = {f"Padrão {i}": f"uniforme{i}.jpg" for i in range(1, 8)}
 
@@ -142,7 +144,7 @@ def get_num_stat(player, col_name):
 
 def get_id(player):
     if not player: return None
-    return str(player.get('INDEX', ''))
+    return str(player.get('INDEX', '')).strip()
 
 @st.cache_data
 def get_valid_images():
@@ -215,7 +217,7 @@ if data_ui is None:
 # Consolidação dos Dados e Preparação de Filtros
 df_all = data_ui["Jogadores"].copy()
 if 'REG. POS.' in df_all.columns:
-    df_all['REG. POS.'].astype(str).str.strip().str.upper()
+    df_all['REG. POS.'] = df_all['REG. POS.'].astype(str).str.strip().str.upper()
 else:
     df_all['REG. POS.'] = 'N/A'
 
@@ -247,26 +249,41 @@ def reset_callback():
     st.session_state.numeros = {}
     st.session_state.form_id += 1
 
-jogadores_atuais = [p for p in st.session_state.escolhas.values() if p]
-custo_total = sum([p.get('MARKET PRICE', 0.0) for p in jogadores_atuais])
-saldo = ORCAMENTO_MAX - custo_total
+jogadores_titulares = [p for k, p in st.session_state.escolhas.items() if p and ('tit' in k)]
+jogadores_reservas = [p for k, p in st.session_state.escolhas.items() if p and ('res' in k)]
+todos_jogadores = jogadores_titulares + jogadores_reservas
 
-qtd_jogadores = len(jogadores_atuais)
-media_overall = sum([p.get('OVERALL', 0) for p in jogadores_atuais]) / qtd_jogadores if qtd_jogadores > 0 else 0
+custo_titular = sum([p.get('MARKET PRICE', 0.0) for p in jogadores_titulares])
+custo_reserva = sum([p.get('MARKET PRICE', 0.0) for p in jogadores_reservas])
+
+saldo_titular = ORCAMENTO_TITULAR - custo_titular
+saldo_reserva = ORCAMENTO_RESERVA - custo_reserva
+
+qtd_jogadores = len(todos_jogadores)
+media_overall = sum([p.get('OVERALL', 0) for p in todos_jogadores]) / qtd_jogadores if qtd_jogadores > 0 else 0
 
 # --- SIDEBAR (PAINEL FINANCEIRO & FILTROS) ---
 st.sidebar.title("💰 Painel Financeiro")
-m1, m2 = st.sidebar.columns(2)
-m1.metric("Gasto Atual", f"€{custo_total:.0f}")
-m2.metric("Saldo Restante", f"€{saldo:.0f}")
-st.sidebar.progress(min(custo_total / ORCAMENTO_MAX, 1.0))
 
+st.sidebar.markdown(f"**Titulares (75%) - Máx: €{ORCAMENTO_TITULAR:.0f}**")
+m1, m2 = st.sidebar.columns(2)
+m1.metric("Gasto Titular", f"€{custo_titular:.0f}")
+m2.metric("Saldo Titular", f"€{saldo_titular:.0f}")
+st.sidebar.progress(min(custo_titular / ORCAMENTO_TITULAR, 1.0))
+
+st.sidebar.markdown(f"**Reservas (25%) - Máx: €{ORCAMENTO_RESERVA:.0f}**")
+m3, m4 = st.sidebar.columns(2)
+m3.metric("Gasto Reserva", f"€{custo_reserva:.0f}")
+m4.metric("Saldo Reserva", f"€{saldo_reserva:.0f}")
+st.sidebar.progress(min(custo_reserva / ORCAMENTO_RESERVA, 1.0))
+
+st.sidebar.markdown("---")
 st.sidebar.metric("Força Média (OVR)", f"{media_overall:.1f}", help="Média do overall de todos os jogadores selecionados")
 
 st.sidebar.markdown("---")
 st.sidebar.subheader("🔍 Filtros de Jogadores")
 
-filtro_p = st.sidebar.number_input("Preço Máx. (€)", 0.0, 100000.0, ORCAMENTO_MAX, 100.0, key="input_filter")
+filtro_p = st.sidebar.number_input("Preço Máx. (€)", 0.0, 100000.0, 45000.0, 100.0, key="input_filter")
 filtro_pais = st.sidebar.selectbox("Nacionalidade", opcoes_nacionalidade, index=1, key="input_pais")
 
 c_alt, c_vel = st.sidebar.columns(2)
@@ -293,19 +310,21 @@ with st.sidebar.expander("📖 O que cada característica faz?"):
 
 # --- COMPONENTES AUXILIARES ---
 def format_func(row):
-    if row is None: return "Selecionar..."
     idade = row.get('AGE', '?')
     if pd.notna(idade) and isinstance(idade, (int, float)): idade = int(idade)
     nacionalidade = row.get('NATIONALITY', '?')
     if pd.isna(nacionalidade): nacionalidade = '?'
     return f"{row.get('NAME','?')} | {nacionalidade} | {row.get('REG. POS.','?')} | Idade: {idade} | OV: {row.get('OVERALL','?')} | €{row.get('MARKET PRICE',0):.1f}"
 
-def seletor(label, df, key):
+def seletor(label, df, key, is_titular=True):
     escolha = st.session_state.escolhas.get(key)
     val_atual = escolha.get('MARKET PRICE', 0.0) if escolha else 0.0
-    usados = [v['NAME'] for k,v in st.session_state.escolhas.items() if v and k != key]
     
-    mask = (df['MARKET PRICE'] <= (saldo + val_atual)) & (df['MARKET PRICE'] <= filtro_p)
+    usados_ids = [get_id(v) for k,v in st.session_state.escolhas.items() if v and k != key]
+    
+    saldo_disponivel = saldo_titular if is_titular else saldo_reserva
+    
+    mask = (df['MARKET PRICE'] <= (saldo_disponivel + val_atual)) & (df['MARKET PRICE'] <= filtro_p)
     mask = mask & (df['HEIGHT'] >= filtro_alt)
     mask = mask & (df['TOP SPEED'] >= filtro_vel)
     
@@ -318,12 +337,14 @@ def seletor(label, df, key):
         mask = mask & (df[col_hab] == 1)
         
     df_f = df[mask]
-    if usados: df_f = df_f[~df_f['NAME'].isin(usados)]
+    if usados_ids: 
+        df_f = df_f[~df_f['INDEX'].isin(usados_ids)]
         
     ops = df_f.to_dict('records')
     
-    if escolha and escolha['NAME'] not in [o['NAME'] for o in ops]: 
-        ops.insert(0, escolha)
+    if escolha:
+        if not any(get_id(o) == get_id(escolha) for o in ops):
+            ops.insert(0, escolha)
     
     idx = None
     if escolha:
@@ -333,7 +354,7 @@ def seletor(label, df, key):
     
     c_sel, c_num = st.columns([4.0, 1.0]) 
     with c_sel:
-        new_sel = st.selectbox(label, ops, index=idx, format_func=format_func, placeholder="Selecionar jogador...", key=f"s_{key}_{st.session_state.form_id}")
+        new_sel = st.selectbox(label, options=ops, index=idx, format_func=format_func, placeholder="Selecionar jogador...", key=f"s_{key}_{st.session_state.form_id}")
         
         if new_sel:
             pos = new_sel.get('REG. POS.', '').strip().upper()
@@ -455,31 +476,31 @@ with tab_elenco:
     with st.expander("🏟️ Titular", expanded=True):
         c_tit1, c_tit2 = st.columns(2)
         with c_tit1:
-            gk = seletor("Jogador 1 (Goleiro)", df_gk, "gk_tit")
+            gk = seletor("Jogador 1 (Goleiro)", df_gk, "gk_tit", is_titular=True)
             if gk: lista.append({**gk, "T": "TITULAR", "P": gk.get('REG. POS.', 'GK'), "K": "gk_tit"})
             
             for i in range(2, 7):
-                p = seletor(f"Jogador {i}", df_linha_filtrado, f"tit_{i}")
+                p = seletor(f"Jogador {i}", df_linha_filtrado, f"tit_{i}", is_titular=True)
                 if p: lista.append({**p, "T": "TITULAR", "P": p.get('REG. POS.', 'N/A'), "K": f"tit_{i}"})
                 
         with c_tit2:
             for i in range(7, 12):
-                p = seletor(f"Jogador {i}", df_linha_filtrado, f"tit_{i}")
+                p = seletor(f"Jogador {i}", df_linha_filtrado, f"tit_{i}", is_titular=True)
                 if p: lista.append({**p, "T": "TITULAR", "P": p.get('REG. POS.', 'N/A'), "K": f"tit_{i}"})
 
     with st.expander("✈️ Reserva", expanded=False):
         c_res1, c_res2 = st.columns(2)
         with c_res1:
-            gkr = seletor("Reserva 1 (Goleiro)", df_gk, "gk_res")
+            gkr = seletor("Reserva 1 (Goleiro)", df_gk, "gk_res", is_titular=False)
             if gkr: lista.append({**gkr, "T": "RESERVA", "P": gkr.get('REG. POS.', 'GK'), "K": "gk_res"})
             
             for i in range(2, 4):
-                p = seletor(f"Reserva {i}", df_linha_filtrado, f"res_{i}")
+                p = seletor(f"Reserva {i}", df_linha_filtrado, f"res_{i}", is_titular=False)
                 if p: lista.append({**p, "T": "RESERVA", "P": p.get('REG. POS.', 'N/A'), "K": f"res_{i}"})
                 
         with c_res2:
             for i in range(4, 6):
-                p = seletor(f"Reserva {i}", df_linha_filtrado, f"res_{i}")
+                p = seletor(f"Reserva {i}", df_linha_filtrado, f"res_{i}", is_titular=False)
                 if p: lista.append({**p, "T": "RESERVA", "P": p.get('REG. POS.', 'N/A'), "K": f"res_{i}"})
 
 with tab_resumo:
