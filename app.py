@@ -275,7 +275,7 @@ if saldo_titular < 0:
 m1, m2 = st.sidebar.columns(2)
 m1.metric("Gasto Titular", f"€{custo_titular:.0f}")
 m2.metric("Saldo Titular", f"€{saldo_titular:.0f}")
-st.sidebar.progress(min(custo_titular / ORCAMENTO_TITULAR, 1.0))
+st.sidebar.progress(min(max(custo_titular / ORCAMENTO_TITULAR, 0.0), 1.0))
 
 st.sidebar.markdown(f"**Reservas - Máx: €{ORCAMENTO_RESERVA:.0f}**")
 if saldo_reserva < 0:
@@ -283,15 +283,11 @@ if saldo_reserva < 0:
 m3, m4 = st.sidebar.columns(2)
 m3.metric("Gasto Reserva", f"€{custo_reserva:.0f}")
 m4.metric("Saldo Reserva", f"€{saldo_reserva:.0f}")
-st.sidebar.progress(min(custo_reserva / ORCAMENTO_RESERVA, 1.0))
-
-st.sidebar.markdown("---")
-st.sidebar.metric("Força Média (OVR)", f"{media_overall:.1f}", help="Média do overall de todos os jogadores selecionados")
+st.sidebar.progress(min(max(custo_reserva / ORCAMENTO_RESERVA, 0.0), 1.0))
 
 st.sidebar.markdown("---")
 st.sidebar.subheader("🔍 Filtros de Jogadores")
 
-# Filtro P mudou para não mais barrar os jogadores caros, apenas filtrar visualmente
 filtro_p = st.sidebar.number_input("Preço Máx. Filtro (€)", 0.0, 100000.0, 50000.0, 100.0, key="input_filter")
 filtro_pais = st.sidebar.selectbox("Nacionalidade", opcoes_nacionalidade, index=1, key="input_pais")
 
@@ -327,8 +323,9 @@ def format_func(row):
 
 # Função para renderizar barra de progresso colorida
 def render_progress_bar(label, value):
-    val_clamped = min(max(value, 0), 99) # Previne erros se a média bugar
-    color = "#28a745" if val_clamped >= 85 else ("#fd7e14" if val_clamped >= 75 else "#dc3545")
+    val_clamped = min(max(value, 0), 99) 
+    # Vermelho = Forte (>=85), Amarelo = Médio (75-84), Verde = Fraco (<75)
+    color = "#dc3545" if val_clamped >= 85 else ("#fd7e14" if val_clamped >= 75 else "#28a745")
     st.markdown(f"""
     <div style="margin-bottom: 8px;">
         <div style="display: flex; justify-content: space-between; font-size: 0.85rem; font-weight: bold; margin-bottom: 2px; color: #444;">
@@ -346,8 +343,6 @@ def seletor(label, df, key, is_titular=True):
     
     usados_ids = [get_id(v) for k,v in st.session_state.escolhas.items() if v and k != key]
     
-    # NOVA LÓGICA: O filtro de orçamento duro (que escondia o jogador) foi removido.
-    # Agora o usuário pode ver todos os jogadores até o limite de "filtro_p" e decidir se quer estourar o orçamento.
     mask = (df['MARKET PRICE'] <= filtro_p)
     mask = mask & (df['HEIGHT'] >= filtro_alt)
     mask = mask & (df['TOP SPEED'] >= filtro_vel)
@@ -584,6 +579,9 @@ with tab_resumo:
             
             avg_alt = sum([get_num_stat(p, 'HEIGHT') for p in titulares_selecionados]) / len(titulares_selecionados)
             avg_idade = sum([get_num_stat(p, 'AGE') for p in titulares_selecionados]) / len(titulares_selecionados)
+            
+            # --- OVERALL NOVO AQUI ---
+            st.markdown(f"#### ⭐ Força Média Geral (OVR): {media_overall:.1f}")
             
             st.markdown(f"**Estatísticas Médias Físicas:** <br>📏 Altura: {avg_alt:.0f}cm &nbsp;&nbsp;|&nbsp;&nbsp; 🎂 Idade: {avg_idade:.1f} anos", unsafe_allow_html=True)
             st.markdown("<br>**Média de Atributos:**", unsafe_allow_html=True)
