@@ -259,7 +259,6 @@ custo_reserva = sum([p.get('MARKET PRICE', 0.0) for p in jogadores_reservas])
 saldo_titular = ORCAMENTO_TITULAR - custo_titular
 saldo_reserva = ORCAMENTO_RESERVA - custo_reserva
 
-# Flag de controle para travar envio caso passe dos limites
 estourou_orcamento = (saldo_titular < 0) or (saldo_reserva < 0)
 
 qtd_jogadores = len(todos_jogadores)
@@ -619,7 +618,16 @@ with tab_resumo:
         df_resumo['PREÇO (€)'] = [float(p.get('MARKET PRICE', 0.0)) for p in lista_sorted]
         df_resumo['IDADE'] = [int(get_num_stat(p, 'AGE')) for p in lista_sorted]
         df_resumo['ALTURA'] = [f"{int(get_num_stat(p, 'HEIGHT'))}cm" for p in lista_sorted]
-        df_resumo['OVERALL'] = [int(get_num_stat(p, 'OVERALL')) for p in lista_sorted]
+        
+        # --- NOVO SISTEMA DE CORES LEVE (Sem Pandas Style) ---
+        def get_overall_emoji(val):
+            v = int(val)
+            if v >= 90: return f"🟢 {v}"
+            elif v >= 80: return f"🟡 {v}"
+            elif v >= 75: return f"🟠 {v}"
+            else: return f"🔴 {v}"
+            
+        df_resumo['OVERALL'] = [get_overall_emoji(get_num_stat(p, 'OVERALL')) for p in lista_sorted]
         
         cartas_list = []
         for p in lista_sorted:
@@ -631,30 +639,15 @@ with tab_resumo:
         df_display = df_resumo[colunas_exibicao].copy()
         df_display.rename(columns={'NAME': 'NOME', 'P': 'POSIÇÃO', 'T': 'STATUS'}, inplace=True)
         
-        # Função customizada super leve (Substitui o background_gradient pesado)
-        def color_overall(val):
-            try:
-                v = int(val)
-                if v >= 90: return 'background-color: #4ade80; color: black; font-weight: bold;' # Verde Forte
-                elif v >= 80: return 'background-color: #fde047; color: black; font-weight: bold;' # Amarelo
-                elif v >= 75: return 'background-color: #fb923c; color: black; font-weight: bold;' # Laranja
-                else: return 'background-color: #f87171; color: white; font-weight: bold;' # Vermelho
-            except:
-                return ''
-
-        # Aplica a cor customizada com suporte a diferentes versões do Pandas
-        if hasattr(df_display.style, 'map'):
-            styled_df = df_display.style.map(color_overall, subset=['OVERALL'])
-        else:
-            styled_df = df_display.style.applymap(color_overall, subset=['OVERALL'])
-            
-        styled_df = styled_df.format({"PREÇO (€)": "€ {:.1f}"})
-        
+        # Passando o dataframe diretamente sem usar o .style pesado
         st.dataframe(
-            styled_df, 
+            df_display, 
             width="stretch", 
             height=620,
-            hide_index=True
+            hide_index=True,
+            column_config={
+                "PREÇO (€)": st.column_config.NumberColumn(format="€ %.1f")
+            }
         )
     else:
         st.info("Lista de jogadores vazia.")
