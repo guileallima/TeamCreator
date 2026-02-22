@@ -35,14 +35,6 @@ POS_MAPPING = {
     "Ponta Direita": ["RWF"]
 }
 
-# Mapeamento para Agrupamento Financeiro (Gráficos)
-SECTORS = {
-    'GK': 'Goleiro',
-    'CB': 'Defesa', 'SWP': 'Defesa', 'D': 'Defesa', 'LB': 'Defesa', 'LWB': 'Defesa', 'RB': 'Defesa', 'RWB': 'Defesa', 'SB': 'Defesa',
-    'DMF': 'Meio-Campo', 'CMF': 'Meio-Campo', 'SMF': 'Meio-Campo', 'RMF': 'Meio-Campo', 'LMF': 'Meio-Campo', 'AMF': 'Meio-Campo', 'M': 'Meio-Campo', 'WB': 'Meio-Campo',
-    'SS': 'Ataque', 'CF': 'Ataque', 'A': 'Ataque', 'LWF': 'Ataque', 'WF': 'Ataque', 'RWF': 'Ataque'
-}
-
 # --- DICIONÁRIOS DE HABILIDADES ---
 PLAYSTYLES = {
     "Clássico No. 10": ("P01 CLASSIC NO.10", "Jogador armador estático que faz bons passes em vez de manter um bom ritmo ou de movimentar-se muito."),
@@ -259,7 +251,6 @@ custo_reserva = sum([p.get('MARKET PRICE', 0.0) for p in jogadores_reservas])
 saldo_titular = ORCAMENTO_TITULAR - custo_titular
 saldo_reserva = ORCAMENTO_RESERVA - custo_reserva
 
-# Flag de controle para travar envio caso passe dos limites
 estourou_orcamento = (saldo_titular < 0) or (saldo_reserva < 0)
 
 qtd_jogadores = len(todos_jogadores)
@@ -283,9 +274,6 @@ m3, m4 = st.sidebar.columns(2)
 m3.metric("Gasto Reserva", f"€{custo_reserva:.0f}")
 m4.metric("Saldo Reserva", f"€{saldo_reserva:.0f}")
 st.sidebar.progress(min(max(custo_reserva / ORCAMENTO_RESERVA, 0.0), 1.0))
-
-st.sidebar.markdown("---")
-st.sidebar.metric("Força Média (OVR)", f"{media_overall:.1f}", help="Média do overall de todos os jogadores selecionados")
 
 st.sidebar.markdown("---")
 st.sidebar.subheader("🔍 Filtros de Jogadores")
@@ -323,10 +311,8 @@ def format_func(row):
     if pd.isna(nacionalidade): nacionalidade = '?'
     return f"{row.get('NAME','?')} | {nacionalidade} | {row.get('REG. POS.','?')} | Idade: {idade} | OV: {row.get('OVERALL','?')} | €{row.get('MARKET PRICE',0):.1f}"
 
-# Função para renderizar barra de progresso colorida
 def render_progress_bar(label, value):
     val_clamped = min(max(value, 0), 99) 
-    # Vermelho = Forte (>=85), Amarelo = Médio (75-84), Verde = Fraco (<75)
     color = "#dc3545" if val_clamped >= 85 else ("#fd7e14" if val_clamped >= 75 else "#28a745")
     st.markdown(f"""
     <div style="margin-bottom: 8px;">
@@ -342,7 +328,6 @@ def render_progress_bar(label, value):
 
 def seletor(label, df, key, is_titular=True):
     escolha = st.session_state.escolhas.get(key)
-    
     usados_ids = [get_id(v) for k,v in st.session_state.escolhas.items() if v and k != key]
     
     mask = (df['MARKET PRICE'] <= filtro_p)
@@ -550,7 +535,6 @@ with tab_resumo:
     partes_formacao = formacao.split('-')
     req_def, req_mid, req_atk = int(partes_formacao[0]), int(partes_formacao[1]), int(partes_formacao[2])
     
-    # --- AVISO DE CAMISAS REPETIDAS ---
     numeros_escolhidos = [st.session_state.numeros.get(p['K'], 0) for p in lista]
     numeros_validos = [n for n in numeros_escolhidos if n > 0]
     if len(numeros_validos) != len(set(numeros_validos)):
@@ -567,7 +551,6 @@ with tab_resumo:
     
     st.markdown("---")
     
-    # --- GRÁFICOS DE ANÁLISE ---
     st.subheader("📈 Análise do Elenco Titular")
     if len(titulares_selecionados) > 0:
         c_graf1, c_graf2 = st.columns(2)
@@ -582,9 +565,7 @@ with tab_resumo:
             avg_alt = sum([get_num_stat(p, 'HEIGHT') for p in titulares_selecionados]) / len(titulares_selecionados)
             avg_idade = sum([get_num_stat(p, 'AGE') for p in titulares_selecionados]) / len(titulares_selecionados)
             
-            # --- OVERALL NOVO AQUI ---
             st.markdown(f"#### ⭐ Força Média Geral (OVR): {media_overall:.1f}")
-            
             st.markdown(f"**Estatísticas Médias Físicas:** <br>📏 Altura: {avg_alt:.0f}cm &nbsp;&nbsp;|&nbsp;&nbsp; 🎂 Idade: {avg_idade:.1f} anos", unsafe_allow_html=True)
             st.markdown("<br>**Média de Atributos:**", unsafe_allow_html=True)
             
@@ -603,7 +584,6 @@ with tab_resumo:
             df_budget = df_budget[df_budget['Gasto (€)'] > 0]
             
             if not df_budget.empty:
-                # Usando o gráfico de barras nativo do Streamlit ao invés do Plotly
                 df_budget.set_index('Setor', inplace=True)
                 st.bar_chart(df_budget, width="stretch", height=300)
             else:
@@ -614,21 +594,51 @@ with tab_resumo:
     st.markdown("---")
     st.subheader("📋 Tabela Geral do Plantel")
     if len(lista) > 0:
-        df_resumo = pd.DataFrame(lista)
-        df_resumo['Nº'] = [st.session_state.numeros.get(p['K'], 0) for p in lista]
-        df_resumo['PREÇO (€)'] = [float(p.get('MARKET PRICE', 0.0)) for p in lista]
+        # Define a ordem de ordenação das posições (Goleiro -> Defesa -> Meio -> Ataque)
+        pos_order = {'GK': 1, 'CB': 2, 'SWP': 2, 'D': 2, 'LB': 2, 'LWB': 2, 'RB': 2, 'RWB': 2, 'SB': 2,
+                     'DMF': 3, 'CMF': 3, 'SMF': 3, 'RMF': 3, 'LMF': 3, 'AMF': 3, 'M': 3, 'WB': 3,
+                     'SS': 4, 'CF': 4, 'A': 4, 'LWF': 4, 'WF': 4, 'RWF': 4}
         
-        colunas_exibicao = ['Nº', 'NAME', 'P', 'OVERALL', 'PREÇO (€)', 'T']
+        # Ordena: Primeiro Titulares(0) depois Reservas(1) -> Posição -> Overall (do maior pro menor)
+        lista_sorted = sorted(lista, key=lambda x: (
+            0 if x['T'] == 'TITULAR' else 1,
+            pos_order.get(str(x.get('P', '')).strip().upper(), 5),
+            -get_num_stat(x, 'OVERALL')
+        ))
+
+        df_resumo = pd.DataFrame(lista_sorted)
+        df_resumo['Nº'] = [st.session_state.numeros.get(p['K'], 0) for p in lista_sorted]
+        df_resumo['PREÇO (€)'] = [float(p.get('MARKET PRICE', 0.0)) for p in lista_sorted]
+        df_resumo['IDADE'] = [int(get_num_stat(p, 'AGE')) for p in lista_sorted]
+        df_resumo['ALTURA'] = [f"{int(get_num_stat(p, 'HEIGHT'))}cm" for p in lista_sorted]
+        df_resumo['OVERALL'] = [int(get_num_stat(p, 'OVERALL')) for p in lista_sorted]
+        
+        # Contagem de cartas (Playstyles e Skills)
+        cartas_list = []
+        for p in lista_sorted:
+            c = sum(1 for h_nome, (col_name, _) in list(PLAYSTYLES.items()) + list(SKILLS.items()) if p.get(col_name) == 1)
+            cartas_list.append(f"{c} 🃏")
+        df_resumo['CARTAS'] = cartas_list
+        
+        colunas_exibicao = ['Nº', 'NAME', 'P', 'IDADE', 'ALTURA', 'OVERALL', 'CARTAS', 'PREÇO (€)', 'T']
         df_display = df_resumo[colunas_exibicao].copy()
         df_display.rename(columns={'NAME': 'NOME', 'P': 'POSIÇÃO', 'T': 'STATUS'}, inplace=True)
         
+        # Aplica Heatmap na coluna de Overall (Verde = Alto, Amarelo = Médio, Vermelho = Baixo)
+        styled_df = df_display.style.background_gradient(
+            subset=['OVERALL'], 
+            cmap='RdYlGn', 
+            vmin=65, 
+            vmax=95
+        ).format({
+            "PREÇO (€)": "€ {:.1f}"
+        })
+        
         st.dataframe(
-            df_display, 
+            styled_df, 
             width="stretch", 
-            hide_index=True,
-            column_config={
-                "PREÇO (€)": st.column_config.NumberColumn(format="€ %.1f")
-            }
+            height=620, # Tamanho fixo perfeito para os 16 jogadores sem gerar scroll duplo
+            hide_index=True
         )
     else:
         st.info("Lista de jogadores vazia.")
