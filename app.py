@@ -9,8 +9,6 @@ from email import encoders
 import tempfile
 import os
 import re
-import plotly.express as px
-import plotly.graph_objects as go
 
 # --- CONFIGURAÇÕES GERAIS ---
 EMAIL_REMETENTE = "leallimagui@gmail.com" 
@@ -285,6 +283,9 @@ m3, m4 = st.sidebar.columns(2)
 m3.metric("Gasto Reserva", f"€{custo_reserva:.0f}")
 m4.metric("Saldo Reserva", f"€{saldo_reserva:.0f}")
 st.sidebar.progress(min(max(custo_reserva / ORCAMENTO_RESERVA, 0.0), 1.0))
+
+st.sidebar.markdown("---")
+st.sidebar.metric("Força Média (OVR)", f"{media_overall:.1f}", help="Média do overall de todos os jogadores selecionados")
 
 st.sidebar.markdown("---")
 st.sidebar.subheader("🔍 Filtros de Jogadores")
@@ -581,7 +582,9 @@ with tab_resumo:
             avg_alt = sum([get_num_stat(p, 'HEIGHT') for p in titulares_selecionados]) / len(titulares_selecionados)
             avg_idade = sum([get_num_stat(p, 'AGE') for p in titulares_selecionados]) / len(titulares_selecionados)
             
+            # --- OVERALL NOVO AQUI ---
             st.markdown(f"#### ⭐ Força Média Geral (OVR): {media_overall:.1f}")
+            
             st.markdown(f"**Estatísticas Médias Físicas:** <br>📏 Altura: {avg_alt:.0f}cm &nbsp;&nbsp;|&nbsp;&nbsp; 🎂 Idade: {avg_idade:.1f} anos", unsafe_allow_html=True)
             st.markdown("<br>**Média de Atributos:**", unsafe_allow_html=True)
             
@@ -600,10 +603,9 @@ with tab_resumo:
             df_budget = df_budget[df_budget['Gasto (€)'] > 0]
             
             if not df_budget.empty:
-                fig_pie = px.pie(df_budget, values='Gasto (€)', names='Setor', hole=0.4, 
-                                 color_discrete_sequence=px.colors.qualitative.Set2)
-                fig_pie.update_layout(margin=dict(l=20, r=20, t=20, b=20), height=300)
-                st.plotly_chart(fig_pie, width="stretch")
+                # Usando o gráfico de barras nativo do Streamlit ao invés do Plotly
+                df_budget.set_index('Setor', inplace=True)
+                st.bar_chart(df_budget, width="stretch", height=300)
             else:
                 st.info("Nenhum orçamento gasto ainda.")
     else:
