@@ -10,15 +10,16 @@ import tempfile
 import os
 import re
 import plotly.express as px
-import plotly.graph_objects as go
 
 # --- CONFIGURAÇÕES GERAIS ---
 EMAIL_REMETENTE = "leallimagui@gmail.com" 
 SENHA_APP = "nmrytcivcuidhryn" 
 EMAIL_DESTINO = "leallimagui@gmail.com"
-ORCAMENTO_TOTAL = 60000.0
-ORCAMENTO_TITULAR = 45000.0
-ORCAMENTO_RESERVA = 15000.0
+
+# NOVOS ORÇAMENTOS
+ORCAMENTO_TOTAL = 50000.0
+ORCAMENTO_TITULAR = 40000.0
+ORCAMENTO_RESERVA = 10000.0
 
 OPCOES_CAMISAS = {f"Padrão {i}": f"uniforme{i}.jpg" for i in range(1, 8)}
 
@@ -259,19 +260,26 @@ custo_reserva = sum([p.get('MARKET PRICE', 0.0) for p in jogadores_reservas])
 saldo_titular = ORCAMENTO_TITULAR - custo_titular
 saldo_reserva = ORCAMENTO_RESERVA - custo_reserva
 
+# Flag de controle para travar envio caso passe dos limites
+estourou_orcamento = (saldo_titular < 0) or (saldo_reserva < 0)
+
 qtd_jogadores = len(todos_jogadores)
 media_overall = sum([p.get('OVERALL', 0) for p in todos_jogadores]) / qtd_jogadores if qtd_jogadores > 0 else 0
 
 # --- SIDEBAR (PAINEL FINANCEIRO & FILTROS) ---
 st.sidebar.title("💰 Painel Financeiro")
 
-st.sidebar.markdown(f"**Titulares (75%) - Máx: €{ORCAMENTO_TITULAR:.0f}**")
+st.sidebar.markdown(f"**Titulares - Máx: €{ORCAMENTO_TITULAR:.0f}**")
+if saldo_titular < 0:
+    st.sidebar.error(f"❌ Estourado em €{abs(saldo_titular):.0f}")
 m1, m2 = st.sidebar.columns(2)
 m1.metric("Gasto Titular", f"€{custo_titular:.0f}")
 m2.metric("Saldo Titular", f"€{saldo_titular:.0f}")
 st.sidebar.progress(min(custo_titular / ORCAMENTO_TITULAR, 1.0))
 
-st.sidebar.markdown(f"**Reservas (25%) - Máx: €{ORCAMENTO_RESERVA:.0f}**")
+st.sidebar.markdown(f"**Reservas - Máx: €{ORCAMENTO_RESERVA:.0f}**")
+if saldo_reserva < 0:
+    st.sidebar.error(f"❌ Estourado em €{abs(saldo_reserva):.0f}")
 m3, m4 = st.sidebar.columns(2)
 m3.metric("Gasto Reserva", f"€{custo_reserva:.0f}")
 m4.metric("Saldo Reserva", f"€{saldo_reserva:.0f}")
@@ -283,7 +291,8 @@ st.sidebar.metric("Força Média (OVR)", f"{media_overall:.1f}", help="Média do
 st.sidebar.markdown("---")
 st.sidebar.subheader("🔍 Filtros de Jogadores")
 
-filtro_p = st.sidebar.number_input("Preço Máx. (€)", 0.0, 100000.0, 45000.0, 100.0, key="input_filter")
+# Filtro P mudou para não mais barrar os jogadores caros, apenas filtrar visualmente
+filtro_p = st.sidebar.number_input("Preço Máx. Filtro (€)", 0.0, 100000.0, 50000.0, 100.0, key="input_filter")
 filtro_pais = st.sidebar.selectbox("Nacionalidade", opcoes_nacionalidade, index=1, key="input_pais")
 
 c_alt, c_vel = st.sidebar.columns(2)
@@ -316,15 +325,30 @@ def format_func(row):
     if pd.isna(nacionalidade): nacionalidade = '?'
     return f"{row.get('NAME','?')} | {nacionalidade} | {row.get('REG. POS.','?')} | Idade: {idade} | OV: {row.get('OVERALL','?')} | €{row.get('MARKET PRICE',0):.1f}"
 
+# Função para renderizar barra de progresso colorida
+def render_progress_bar(label, value):
+    val_clamped = min(max(value, 0), 99) # Previne erros se a média bugar
+    color = "#28a745" if val_clamped >= 85 else ("#fd7e14" if val_clamped >= 75 else "#dc3545")
+    st.markdown(f"""
+    <div style="margin-bottom: 8px;">
+        <div style="display: flex; justify-content: space-between; font-size: 0.85rem; font-weight: bold; margin-bottom: 2px; color: #444;">
+            <span>{label}</span>
+            <span>{val_clamped:.0f}</span>
+        </div>
+        <div style="width: 100%; background-color: #e9ecef; border-radius: 4px; height: 14px; overflow: hidden;">
+            <div style="width: {val_clamped}%; background-color: {color}; height: 100%; border-radius: 4px;"></div>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+
 def seletor(label, df, key, is_titular=True):
     escolha = st.session_state.escolhas.get(key)
-    val_atual = escolha.get('MARKET PRICE', 0.0) if escolha else 0.0
     
     usados_ids = [get_id(v) for k,v in st.session_state.escolhas.items() if v and k != key]
     
-    saldo_disponivel = saldo_titular if is_titular else saldo_reserva
-    
-    mask = (df['MARKET PRICE'] <= (saldo_disponivel + val_atual)) & (df['MARKET PRICE'] <= filtro_p)
+    # NOVA LÓGICA: O filtro de orçamento duro (que escondia o jogador) foi removido.
+    # Agora o usuário pode ver todos os jogadores até o limite de "filtro_p" e decidir se quer estourar o orçamento.
+    mask = (df['MARKET PRICE'] <= filtro_p)
     mask = mask & (df['HEIGHT'] >= filtro_alt)
     mask = mask & (df['TOP SPEED'] >= filtro_vel)
     
@@ -529,6 +553,12 @@ with tab_resumo:
     partes_formacao = formacao.split('-')
     req_def, req_mid, req_atk = int(partes_formacao[0]), int(partes_formacao[1]), int(partes_formacao[2])
     
+    # --- AVISO DE CAMISAS REPETIDAS ---
+    numeros_escolhidos = [st.session_state.numeros.get(p['K'], 0) for p in lista]
+    numeros_validos = [n for n in numeros_escolhidos if n > 0]
+    if len(numeros_validos) != len(set(numeros_validos)):
+        st.warning("⚠️ **Aviso:** Há jogadores com números de camisa repetidos no seu elenco!")
+
     st.subheader("📋 Validação Tática (Equipe Titular)")
     st.caption(f"Comparando seus jogadores escolhidos com a formação base selecionada: **{formacao}**")
     
@@ -556,27 +586,13 @@ with tab_resumo:
             avg_idade = sum([get_num_stat(p, 'AGE') for p in titulares_selecionados]) / len(titulares_selecionados)
             
             st.markdown(f"**Estatísticas Médias Físicas:** <br>📏 Altura: {avg_alt:.0f}cm &nbsp;&nbsp;|&nbsp;&nbsp; 🎂 Idade: {avg_idade:.1f} anos", unsafe_allow_html=True)
+            st.markdown("<br>**Média de Atributos:**", unsafe_allow_html=True)
             
-            categories = ['Ataque', 'Velocidade', 'Técnica', 'Físico', 'Defesa']
-            values = [avg_atk, avg_vel, avg_tec, avg_fis, avg_def]
-            values.append(values[0])
-            categories.append(categories[0])
-            
-            fig_radar = go.Figure()
-            fig_radar.add_trace(go.Scatterpolar(
-                r=values,
-                theta=categories,
-                fill='toself',
-                name='Titulares',
-                line_color='#0055aa'
-            ))
-            fig_radar.update_layout(
-                polar=dict(radialaxis=dict(visible=True, range=[0, 99])),
-                showlegend=False,
-                margin=dict(l=20, r=20, t=20, b=20),
-                height=300
-            )
-            st.plotly_chart(fig_radar, use_container_width=True)
+            render_progress_bar("Ataque", avg_atk)
+            render_progress_bar("Defesa", avg_def)
+            render_progress_bar("Velocidade", avg_vel)
+            render_progress_bar("Físico", avg_fis)
+            render_progress_bar("Técnica", avg_tec)
 
         with c_graf2:
             st.markdown("**Distribuição de Orçamento por Setor**")
@@ -590,7 +606,7 @@ with tab_resumo:
                 fig_pie = px.pie(df_budget, values='Gasto (€)', names='Setor', hole=0.4, 
                                  color_discrete_sequence=px.colors.qualitative.Set2)
                 fig_pie.update_layout(margin=dict(l=20, r=20, t=20, b=20), height=300)
-                st.plotly_chart(fig_pie, use_container_width=True)
+                st.plotly_chart(fig_pie, width="stretch")
             else:
                 st.info("Nenhum orçamento gasto ainda.")
     else:
@@ -609,7 +625,7 @@ with tab_resumo:
         
         st.dataframe(
             df_display, 
-            use_container_width=True, 
+            width="stretch", 
             hide_index=True,
             column_config={
                 "PREÇO (€)": st.column_config.NumberColumn(format="€ %.1f")
@@ -619,13 +635,13 @@ with tab_resumo:
         st.info("Lista de jogadores vazia.")
 
 st.markdown("---")
-if st.button("🔄 Limpar Tudo", use_container_width=True):
+if st.button("🔄 Limpar Tudo", width="stretch"):
     reset_callback()
     st.rerun()
 st.markdown("###")
 
 # --- EXPORTAÇÃO ---
-if st.button("✅ ENVIAR INSCRIÇÃO", type="primary", use_container_width=True):
+if st.button("✅ ENVIAR INSCRIÇÃO", type="primary", width="stretch", disabled=estourou_orcamento):
     erros = []
     if not int1: erros.append("Jogador 1")
     if not int2: erros.append("Jogador 2")
