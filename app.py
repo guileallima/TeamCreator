@@ -595,7 +595,7 @@ with tab_resumo:
             
             if not df_budget.empty:
                 df_budget.set_index('Setor', inplace=True)
-                st.bar_chart(df_budget, height=300, use_container_width=True)
+                st.bar_chart(df_budget, height=300, width="stretch")
             else:
                 st.info("Nenhum orçamento gasto ainda.")
     else:
@@ -631,18 +631,28 @@ with tab_resumo:
         df_display = df_resumo[colunas_exibicao].copy()
         df_display.rename(columns={'NAME': 'NOME', 'P': 'POSIÇÃO', 'T': 'STATUS'}, inplace=True)
         
-        styled_df = df_display.style.background_gradient(
-            subset=['OVERALL'], 
-            cmap='RdYlGn', 
-            vmin=65, 
-            vmax=95
-        ).format({
-            "PREÇO (€)": "€ {:.1f}"
-        })
+        # Função customizada super leve (Substitui o background_gradient pesado)
+        def color_overall(val):
+            try:
+                v = int(val)
+                if v >= 90: return 'background-color: #4ade80; color: black; font-weight: bold;' # Verde Forte
+                elif v >= 80: return 'background-color: #fde047; color: black; font-weight: bold;' # Amarelo
+                elif v >= 75: return 'background-color: #fb923c; color: black; font-weight: bold;' # Laranja
+                else: return 'background-color: #f87171; color: white; font-weight: bold;' # Vermelho
+            except:
+                return ''
+
+        # Aplica a cor customizada com suporte a diferentes versões do Pandas
+        if hasattr(df_display.style, 'map'):
+            styled_df = df_display.style.map(color_overall, subset=['OVERALL'])
+        else:
+            styled_df = df_display.style.applymap(color_overall, subset=['OVERALL'])
+            
+        styled_df = styled_df.format({"PREÇO (€)": "€ {:.1f}"})
         
         st.dataframe(
             styled_df, 
-            use_container_width=True, 
+            width="stretch", 
             height=620,
             hide_index=True
         )
@@ -650,13 +660,13 @@ with tab_resumo:
         st.info("Lista de jogadores vazia.")
 
 st.markdown("---")
-if st.button("🔄 Limpar Tudo", use_container_width=True):
+if st.button("🔄 Limpar Tudo", width="stretch"):
     reset_callback()
     st.rerun()
 st.markdown("###")
 
 # --- EXPORTAÇÃO ---
-if st.button("✅ ENVIAR INSCRIÇÃO", type="primary", use_container_width=True, disabled=estourou_orcamento):
+if st.button("✅ ENVIAR INSCRIÇÃO", type="primary", width="stretch", disabled=estourou_orcamento):
     erros = []
     if not int1: erros.append("Jogador 1")
     if not int2: erros.append("Jogador 2")
