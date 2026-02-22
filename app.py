@@ -10,6 +10,7 @@ import tempfile
 import os
 import re
 import plotly.express as px
+import plotly.graph_objects as go
 
 # --- CONFIGURAÇÕES GERAIS ---
 EMAIL_REMETENTE = "leallimagui@gmail.com" 
@@ -580,9 +581,7 @@ with tab_resumo:
             avg_alt = sum([get_num_stat(p, 'HEIGHT') for p in titulares_selecionados]) / len(titulares_selecionados)
             avg_idade = sum([get_num_stat(p, 'AGE') for p in titulares_selecionados]) / len(titulares_selecionados)
             
-            # --- OVERALL NOVO AQUI ---
             st.markdown(f"#### ⭐ Força Média Geral (OVR): {media_overall:.1f}")
-            
             st.markdown(f"**Estatísticas Médias Físicas:** <br>📏 Altura: {avg_alt:.0f}cm &nbsp;&nbsp;|&nbsp;&nbsp; 🎂 Idade: {avg_idade:.1f} anos", unsafe_allow_html=True)
             st.markdown("<br>**Média de Atributos:**", unsafe_allow_html=True)
             
