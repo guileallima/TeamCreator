@@ -179,7 +179,6 @@ def load_data_light():
         col_ov = col_map.get('OVERALL', 'overall')
         col_price = col_map.get('MARKET PRICE', 'market price')
         
-        # BUSCA EXATA PELA COLUNA "CLUB TEAM"
         col_club = col_map.get('CLUB TEAM', col_map.get('CLUB', col_map.get('CLUBE')))
 
         rename_dict = {
@@ -259,6 +258,14 @@ if br_str in lista_nacionalidades:
     lista_nacionalidades.remove(br_str)
 
 opcoes_nacionalidade = [br_str, "Todos"] + lista_nacionalidades
+
+# NOVO: Preparação da Lista de Clubes
+lista_clubes = []
+if 'CLUB' in df_all.columns:
+    lista_clubes = df_all['CLUB'].dropna().astype(str).str.strip().unique().tolist()
+    lista_clubes = sorted([c for c in lista_clubes if c and c.lower() not in ['nan', 'none']])
+opcoes_clubes = ["Todos"] + lista_clubes
+
 opcoes_pos = list(POS_MAPPING.keys())
 opcoes_hab = list(PLAYSTYLES.keys()) + list(SKILLS.keys())
 
@@ -314,6 +321,8 @@ st.sidebar.subheader("🔍 Filtros de Jogadores")
 
 filtro_p = st.sidebar.number_input("Preço Máx. Filtro (€)", min_value=0.0, max_value=100000.0, value=50000.0, step=100.0, key="input_filter")
 filtro_pais = st.sidebar.selectbox("Nacionalidade", opcoes_nacionalidade, index=1, key="input_pais")
+# NOVO: Filtro de Clube inserido aqui
+filtro_clube = st.sidebar.selectbox("Clube", opcoes_clubes, index=0, key="input_clube")
 
 c_alt, c_vel = st.sidebar.columns(2)
 with c_alt: filtro_alt = st.number_input("Altura Mín. (cm)", min_value=100, max_value=220, value=150, step=5, key="input_alt")
@@ -329,6 +338,8 @@ hab_selecionadas = st.sidebar.multiselect("Características (Max 10)", opcoes_ha
 mask_global = (df_all['MARKET PRICE'] <= filtro_p) & (df_all['HEIGHT'] >= filtro_alt) & (df_all['TOP SPEED'] >= filtro_vel)
 if filtro_pais != "Todos":
     mask_global &= (df_all['NATIONALITY'].astype(str).str.strip() == filtro_pais)
+if filtro_clube != "Todos":
+    mask_global &= (df_all['CLUB'].astype(str).str.strip() == filtro_clube)
 for hab in hab_selecionadas:
     col_hab = PLAYSTYLES[hab][0] if hab in PLAYSTYLES else SKILLS[hab][0]
     mask_global &= (df_all[col_hab] == 1)
