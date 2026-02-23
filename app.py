@@ -85,7 +85,7 @@ SKILLS = {
     "Arr. longo do gol": ("S26 GK LONG THROW", "Melhora o alcance dos arremessos do goleiro.")
 }
 
-st.set_page_config(page_title="Squad Builder PES 2013", layout="wide", initial_sidebar_state="expanded")
+st.set_page_config(page_title="Criador de Elenco", layout="wide", initial_sidebar_state="expanded")
 
 # --- CSS (COM REMOÇÃO DOS BOTÕES DE + E -) ---
 st.markdown("""
@@ -159,7 +159,7 @@ def get_valid_images():
         if os.path.exists(arquivo): validas[nome] = arquivo
     return validas
 
-# SISTEMA OTIMIZADO DE LEITURA E CACHE DE TEXTOS (COM BUSCA EXATA "CLUB TEAM")
+# SISTEMA OTIMIZADO DE LEITURA E CACHE DE TEXTOS
 @st.cache_data(show_spinner=False)
 def load_data_light():
     file_ui = "jogadoresdata.xlsx"
@@ -259,7 +259,6 @@ if br_str in lista_nacionalidades:
 
 opcoes_nacionalidade = [br_str, "Todos"] + lista_nacionalidades
 
-# NOVO: Preparação da Lista de Clubes
 lista_clubes = []
 if 'CLUB' in df_all.columns:
     lista_clubes = df_all['CLUB'].dropna().astype(str).str.strip().unique().tolist()
@@ -321,7 +320,6 @@ st.sidebar.subheader("🔍 Filtros de Jogadores")
 
 filtro_p = st.sidebar.number_input("Preço Máx. Filtro (€)", min_value=0.0, max_value=100000.0, value=50000.0, step=100.0, key="input_filter")
 filtro_pais = st.sidebar.selectbox("Nacionalidade", opcoes_nacionalidade, index=1, key="input_pais")
-# NOVO: Filtro de Clube inserido aqui
 filtro_clube = st.sidebar.selectbox("Clube", opcoes_clubes, index=0, key="input_clube")
 
 c_alt, c_vel = st.sidebar.columns(2)
@@ -332,7 +330,7 @@ pos_selecionadas = st.sidebar.multiselect("Posição (Linha)", opcoes_pos, place
 allowed_pos = []
 for p in pos_selecionadas: allowed_pos.extend(POS_MAPPING[p])
 
-hab_selecionadas = st.sidebar.multiselect("Características (Max 10)", opcoes_hab, max_selections=10, placeholder="Selecione estilos/cartões...", key="ms_hab")
+hab_selecionadas = st.sidebar.multiselect("Cartinhas de skill (Max 10)", opcoes_hab, max_selections=10, placeholder="Selecione estilos/cartões...", key="ms_hab")
 
 # --- LÓGICA DE FILTRAGEM GLOBAL ---
 mask_global = (df_all['MARKET PRICE'] <= filtro_p) & (df_all['HEIGHT'] >= filtro_alt) & (df_all['TOP SPEED'] >= filtro_vel)
@@ -424,7 +422,7 @@ def seletor(label, df_base, key, is_titular=True):
 lista = []
 
 # --- TÍTULO ---
-st.title("⚽ SQUAD BUILDER")
+st.title("⚽ CRIADOR DE ELENCO")
 
 # --- ABAS PRINCIPAIS ---
 tab_cad, tab_uni, tab_elenco, tab_resumo = st.tabs(["📋 Cadastro", "👕 Uniformes", "👥 Elenco", "📊 Resumo"])
