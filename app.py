@@ -87,7 +87,7 @@ SKILLS = {
 
 st.set_page_config(page_title="Squad Builder PES 2013", layout="wide", initial_sidebar_state="expanded")
 
-# --- CSS ---
+# --- CSS (COM REMOÇÃO DOS BOTÕES DE + E -) ---
 st.markdown("""
 <style>
     .block-container {padding-top: 1rem; padding-bottom: 1rem;}
@@ -103,6 +103,23 @@ st.markdown("""
         font-size: 0.75rem; color: #444; background-color: #f9f9f9; padding: 6px 10px;
         border-radius: 4px; margin-top: -10px; margin-bottom: 10px; display: block;
         border: 1px solid #ddd; line-height: 1.4;
+    }
+    
+    /* ESCONDER BOTÕES DE + E - DOS FILTROS E CAMISAS */
+    [data-testid="stNumberInputStepDown"], 
+    [data-testid="stNumberInputStepUp"],
+    button[aria-label="Step down"], 
+    button[aria-label="Step up"] {
+        display: none !important;
+    }
+    /* ESCONDER AS SETAS NATIVAS DE NÚMERO DO NAVEGADOR */
+    input[type="number"]::-webkit-inner-spin-button, 
+    input[type="number"]::-webkit-outer-spin-button {
+        -webkit-appearance: none;
+        margin: 0;
+    }
+    input[type="number"] {
+        -moz-appearance: textfield;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -142,7 +159,7 @@ def get_valid_images():
         if os.path.exists(arquivo): validas[nome] = arquivo
     return validas
 
-# SISTEMA OTIMIZADO DE LEITURA E CACHE DE TEXTOS (Anti-Crash)
+# SISTEMA OTIMIZADO DE LEITURA E CACHE DE TEXTOS (COM CLUBE)
 @st.cache_data(show_spinner=False)
 def load_data_light():
     file_ui = "jogadoresdata.xlsx"
@@ -161,9 +178,12 @@ def load_data_light():
         col_pos = col_map.get('POSITION', 'POSITION')
         col_ov = col_map.get('OVERALL', 'overall')
         col_price = col_map.get('MARKET PRICE', 'market price')
+        
+        # Mapeando dinamicamente a coluna de clube (aceita CLUB, CLUBE, TEAM ou TIME)
+        col_club = col_map.get('CLUB', col_map.get('CLUBE', col_map.get('TEAM', col_map.get('TIME', 'CLUB'))))
 
         df.rename(columns={col_id: 'INDEX', col_name: 'NAME', col_nat: 'NATIONALITY', 
-                           col_age: 'AGE', col_pos: 'REG. POS.', col_ov: 'OVERALL'}, inplace=True)
+                           col_age: 'AGE', col_pos: 'REG. POS.', col_ov: 'OVERALL', col_club: 'CLUB'}, inplace=True)
                            
         df['INDEX'] = df['INDEX'].astype(str).str.strip()
         
@@ -175,6 +195,9 @@ def load_data_light():
             
         if 'OVERALL' in df.columns:
             df.sort_values('OVERALL', ascending=False, inplace=True)
+            
+        if 'CLUB' not in df.columns:
+            df['CLUB'] = ""
         
         all_skill_cols = [t[0] for t in PLAYSTYLES.values()] + [t[0] for t in SKILLS.values()]
         for c in all_skill_cols:
@@ -190,20 +213,20 @@ def load_data_light():
             if attr not in df.columns: df[attr] = 0 
             else: df[attr] = pd.to_numeric(df[attr], errors='coerce').fillna(0)
                 
-        # Dicionários de alta performance (Evitam processar dados na hora do render)
         records = df.to_dict('records')
         data_ui["Jogadores"] = df
         data_ui["Dict"] = {str(row['INDEX']): row for row in records}
         
-        # Pre-formatando o texto do SelectBox (Economiza 90% da memória do Streamlit)
         labels = {}
         for row in records:
             idade = int(row.get('AGE', 0)) if pd.notna(row.get('AGE')) else '?'
+            clube = str(row.get('CLUB', '')).strip()
+            clube_str = f" | {clube}" if clube and clube.lower() not in ['nan', 'none', ''] else ""
             nat = str(row.get('NATIONALITY', '?')).strip()
             pos = str(row.get('REG. POS.', '?')).strip()
             ov = row.get('OVERALL', '?')
             preco = float(row.get('MARKET PRICE', 0.0))
-            labels[str(row['INDEX'])] = f"{row.get('NAME', '?')} | {nat} | {pos} | Idade: {idade} | OV: {ov} | €{preco:.1f}"
+            labels[str(row['INDEX'])] = f"{row.get('NAME', '?')}{clube_str} | {nat} | {pos} | Idade: {idade} | OV: {ov} | €{preco:.1f}"
         
         data_ui["Labels"] = labels
         return data_ui
@@ -233,7 +256,7 @@ opcoes_nacionalidade = [br_str, "Todos"] + lista_nacionalidades
 opcoes_pos = list(POS_MAPPING.keys())
 opcoes_hab = list(PLAYSTYLES.keys()) + list(SKILLS.keys())
 
-# --- SESSÃO ---
+# --- SESSÃO OTIMIZADA ---
 if 'escolhas' not in st.session_state: st.session_state.escolhas = {} 
 if 'numeros' not in st.session_state: st.session_state.numeros = {}
 if 'form_id' not in st.session_state: st.session_state.form_id = 0
@@ -283,12 +306,12 @@ st.sidebar.progress(min(max(custo_reserva / ORCAMENTO_RESERVA, 0.0), 1.0))
 st.sidebar.markdown("---")
 st.sidebar.subheader("🔍 Filtros de Jogadores")
 
-filtro_p = st.sidebar.number_input("Preço Máx. Filtro (€)", 0.0, 100000.0, 50000.0, 100.0, key="input_filter")
+filtro_p = st.sidebar.number_input("Preço Máx. Filtro (€)", min_value=0.0, max_value=100000.0, value=50000.0, step=100.0, key="input_filter")
 filtro_pais = st.sidebar.selectbox("Nacionalidade", opcoes_nacionalidade, index=1, key="input_pais")
 
 c_alt, c_vel = st.sidebar.columns(2)
-with c_alt: filtro_alt = st.number_input("Altura Mín. (cm)", 100, 220, 150, 5, key="input_alt")
-with c_vel: filtro_vel = st.number_input("Vel. Mínima", 40, 99, 40, 5, key="input_vel", help="Filtra por Top Speed")
+with c_alt: filtro_alt = st.number_input("Altura Mín. (cm)", min_value=100, max_value=220, value=150, step=5, key="input_alt")
+with c_vel: filtro_vel = st.number_input("Vel. Mínima", min_value=40, max_value=99, value=40, step=5, key="input_vel", help="Filtra por Top Speed")
 
 pos_selecionadas = st.sidebar.multiselect("Posição (Linha)", opcoes_pos, placeholder="Selecione as posições...", key="ms_pos")
 allowed_pos = []
@@ -296,7 +319,7 @@ for p in pos_selecionadas: allowed_pos.extend(POS_MAPPING[p])
 
 hab_selecionadas = st.sidebar.multiselect("Características (Max 10)", opcoes_hab, max_selections=10, placeholder="Selecione estilos/cartões...", key="ms_hab")
 
-# --- LÓGICA DE FILTRAGEM GLOBAL OTIMIZADA (Evita Travamentos) ---
+# --- LÓGICA DE FILTRAGEM GLOBAL ---
 mask_global = (df_all['MARKET PRICE'] <= filtro_p) & (df_all['HEIGHT'] >= filtro_alt) & (df_all['TOP SPEED'] >= filtro_vel)
 if filtro_pais != "Todos":
     mask_global &= (df_all['NATIONALITY'].astype(str).str.strip() == filtro_pais)
@@ -323,7 +346,6 @@ def seletor(label, df_base, key, is_titular=True):
         row_atual = get_player_data(escolha_id)
         if row_atual: val_atual = float(row_atual.get('MARKET PRICE', 0.0))
 
-    # Filtro local super rápido (apenas Orçamento e Usados)
     mask_local = (df_base['MARKET PRICE'] <= (saldo_disponivel + val_atual))
     if usados_ids:
         mask_local = mask_local & (~df_base['INDEX'].isin(usados_ids))
@@ -331,7 +353,6 @@ def seletor(label, df_base, key, is_titular=True):
     df_f = df_base[mask_local]
     ops = [None] + df_f['INDEX'].tolist()
     
-    # Proteção: Mantém o jogador atual visível mesmo se ele não bater mais com os filtros
     if escolha_id and escolha_id not in ops: ops.insert(1, escolha_id)
     idx = ops.index(escolha_id) if escolha_id in ops else 0
     
@@ -371,15 +392,14 @@ def seletor(label, df_base, key, is_titular=True):
             """, unsafe_allow_html=True)
             
     with c_num:
-        val_n = st.session_state.numeros.get(key, 0)
-        if isinstance(val_n, str): val_n = int(val_n) if val_n.isdigit() else 0
-        new_n = st.number_input("Nº", min_value=0, max_value=99, value=val_n, step=1, key=f"n_{key}_{st.session_state.form_id}")
+        val_n = st.session_state.numeros.get(key, None)
+        new_n = st.number_input("Nº", min_value=0, max_value=99, value=val_n, step=1, key=f"n_{key}_{st.session_state.form_id}", placeholder="")
         st.session_state.numeros[key] = new_n
 
     if new_sel_id != escolha_id:
         st.session_state.escolhas[key] = new_sel_id
         if not new_sel_id and key in st.session_state.numeros:
-            st.session_state.numeros[key] = 0
+            st.session_state.numeros[key] = None 
         st.rerun()
         
     return get_player_data(new_sel_id)
@@ -500,8 +520,8 @@ with tab_resumo:
     partes_formacao = formacao.split('-')
     req_def, req_mid, req_atk = int(partes_formacao[0]), int(partes_formacao[1]), int(partes_formacao[2])
     
-    numeros_escolhidos = [st.session_state.numeros.get(p['K'], 0) for p in lista]
-    numeros_validos = [n for n in numeros_escolhidos if n > 0]
+    numeros_escolhidos = [st.session_state.numeros.get(p['K'], None) for p in lista]
+    numeros_validos = [n for n in numeros_escolhidos if n is not None and str(n).strip() != ""]
     if len(numeros_validos) != len(set(numeros_validos)):
         st.warning("⚠️ **Aviso:** Há jogadores com números de camisa repetidos no seu elenco!")
 
@@ -565,7 +585,6 @@ with tab_resumo:
         for p in lista_sorted:
             cat = get_cat_name(p)
             
-            # ADICIONANDO AS LINHAS SEPARADORAS DE POSIÇÕES E RESERVAS
             if cat != current_cat:
                 if current_cat is not None:
                     if cat == 'RESERVAS':
@@ -576,7 +595,7 @@ with tab_resumo:
                         title = f"🟦 {cat} 🟦"
                         
                     final_table_data.append({
-                        'Nº': sep_char, 'NOME': title, 'POSIÇÃO': sep_char,
+                        'Nº': sep_char, 'NOME': title, 'CLUBE': sep_char, 'POSIÇÃO': sep_char,
                         'IDADE': sep_char, 'ALTURA': sep_char, 'OVERALL': sep_char,
                         'CARTAS': sep_char, 'PREÇO (€)': sep_char, 'STATUS': sep_char
                     })
@@ -590,9 +609,13 @@ with tab_resumo:
             
             c = sum(1 for h_nome, (col_name, _) in list(PLAYSTYLES.items()) + list(SKILLS.items()) if p.get(col_name) == 1)
             
+            num_val = st.session_state.numeros.get(p['K'], None)
+            num_str = str(int(num_val)) if num_val is not None else ""
+            
             final_table_data.append({
-                'Nº': str(st.session_state.numeros.get(p['K'], 0)),
+                'Nº': num_str,
                 'NOME': str(p.get('NAME', '')),
+                'CLUBE': str(p.get('CLUB', '')),
                 'POSIÇÃO': str(p.get('P', '')),
                 'IDADE': str(int(get_num_stat(p, 'AGE'))),
                 'ALTURA': f"{int(get_num_stat(p, 'HEIGHT'))}cm",
@@ -619,7 +642,7 @@ if st.button("🔄 Limpar Tudo", width="stretch"):
     st.rerun()
 st.markdown("###")
 
-# --- EXPORTAÇÃO (Com Mapa Tático) ---
+# --- EXPORTAÇÃO ---
 if st.button("✅ ENVIAR INSCRIÇÃO", type="primary", width="stretch", disabled=estourou_orcamento):
     erros = []
     if not int1: erros.append("Jogador 1")
@@ -642,18 +665,20 @@ if st.button("✅ ENVIAR INSCRIÇÃO", type="primary", width="stretch", disabled
             txt_content += "--- TITULARES ---\n"
             for p in lista:
                 if p['T'] == "TITULAR":
-                    num = st.session_state.numeros.get(p['K'], 0)
-                    str_num = str(num) if num != 0 else ""
+                    num_raw = st.session_state.numeros.get(p['K'], None)
+                    str_num = str(int(num_raw)) if num_raw is not None else ""
                     preco = p.get('MARKET PRICE', 0.0)
-                    txt_content += f"ID: {p['INDEX']} | Nº: {str_num} | {p['NAME']} | Preço: €{preco:.1f}\n"
+                    clube_txt = f"[{p.get('CLUB', 'Sem Clube')}]"
+                    txt_content += f"ID: {p['INDEX']} | Nº: {str_num} | {p['NAME']} {clube_txt} | Preço: €{preco:.1f}\n"
             
             txt_content += "\n--- RESERVAS ---\n"
             for p in lista:
                 if p['T'] == "RESERVA":
-                    num = st.session_state.numeros.get(p['K'], 0)
-                    str_num = str(num) if num != 0 else ""
+                    num_raw = st.session_state.numeros.get(p['K'], None)
+                    str_num = str(int(num_raw)) if num_raw is not None else ""
                     preco = p.get('MARKET PRICE', 0.0)
-                    txt_content += f"ID: {p['INDEX']} | Nº: {str_num} | {p['NAME']} | Preço: €{preco:.1f}\n"
+                    clube_txt = f"[{p.get('CLUB', 'Sem Clube')}]"
+                    txt_content += f"ID: {p['INDEX']} | Nº: {str_num} | {p['NAME']} {clube_txt} | Preço: €{preco:.1f}\n"
 
             # 2. GERAÇÃO DO PDF VISUAL
             pdf = FPDF()
@@ -720,8 +745,8 @@ if st.button("✅ ENVIAR INSCRIÇÃO", type="primary", width="stretch", disabled
                 for p in lista:
                     if p['T'] == tipo_filtro:
                         n = str(p.get('NAME','')).encode('latin-1','ignore').decode('latin-1')
-                        raw_num = st.session_state.numeros.get(p['K'], 0)
-                        str_num = str(raw_num) if raw_num != 0 else ""
+                        raw_num = st.session_state.numeros.get(p['K'], None)
+                        str_num = str(int(raw_num)) if raw_num is not None else ""
                         ov = p.get('OVERALL', 0)
                         try: soma += float(ov); qtd += 1
                         except: pass
@@ -766,7 +791,9 @@ if st.button("✅ ENVIAR INSCRIÇÃO", type="primary", width="stretch", disabled
             for p in lista:
                 if p['T'] == 'TITULAR':
                     pos = str(p.get('P', '')).strip().upper()
-                    num = str(st.session_state.numeros.get(p['K'], ''))
+                    
+                    num_raw = st.session_state.numeros.get(p['K'], None)
+                    num = str(int(num_raw)) if num_raw is not None else ""
                     
                     nome_completo = str(p.get('NAME', '')).split()
                     nome_curto = nome_completo[0]
@@ -776,7 +803,7 @@ if st.button("✅ ENVIAR INSCRIÇÃO", type="primary", width="stretch", disabled
                         nome_curto = nome_curto[:10] + "."
                     
                     ovr = p.get('OVERALL', 0)
-                    player_str = f"{num}. {nome_curto} ({ovr})"
+                    player_str = f"{num}. {nome_curto} ({ovr})" if num else f"{nome_curto} ({ovr})"
 
                     if pos == 'GK': gk_list.append(player_str)
                     elif pos in ['CB', 'SWP', 'D', 'LB', 'LWB', 'RB', 'RWB', 'SB']: def_list.append(player_str)
