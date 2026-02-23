@@ -15,6 +15,7 @@ EMAIL_REMETENTE = "leallimagui@gmail.com"
 SENHA_APP = "nmrytcivcuidhryn" 
 EMAIL_DESTINO = "leallimagui@gmail.com"
 
+# NOVOS ORÇAMENTOS
 ORCAMENTO_TOTAL = 50000.0
 ORCAMENTO_TITULAR = 40000.0
 ORCAMENTO_RESERVA = 10000.0
@@ -196,7 +197,6 @@ def load_data_light():
             else: df[attr] = pd.to_numeric(df[attr], errors='coerce').fillna(0)
                 
         data_ui["Jogadores"] = df
-        
         data_ui["Dict"] = {str(row['INDEX']): row for row in df.to_dict('records')}
         return data_ui
     except Exception as e:
@@ -321,7 +321,6 @@ def seletor(label, df, key, is_titular=True):
     df_f = df[mask]
     if usados_ids: df_f = df_f[~df_f['INDEX'].isin(usados_ids)]
         
-    # INSERINDO A OPÇÃO VAZIA (None) DE FORMA PERMANENTE PARA GARANTIR A REMOÇÃO FÁCIL
     ops = [None] + df_f['INDEX'].tolist()
     
     if escolha_id and escolha_id not in ops: ops.insert(1, escolha_id)
@@ -514,9 +513,8 @@ with tab_resumo:
     
     st.subheader("📈 Resumo da Equipe")
     if len(titulares_selecionados) > 0:
-        c_graf1, c_graf2 = st.columns(2)
-        
-        with c_graf1:
+        c_res_1, c_res_2 = st.columns([1.5, 1])
+        with c_res_1:
             avg_atk = sum([(get_num_stat(p, 'ATTACK') + get_num_stat(p, 'SHOT ACCURACY')) / 2 for p in titulares_selecionados]) / len(titulares_selecionados)
             avg_def = sum([(get_num_stat(p, 'DEFENCE') + get_num_stat(p, 'RESPONSE')) / 2 for p in titulares_selecionados]) / len(titulares_selecionados)
             avg_vel = sum([(get_num_stat(p, 'TOP SPEED') + get_num_stat(p, 'EXPLOSIVE POWER')) / 2 for p in titulares_selecionados]) / len(titulares_selecionados)
@@ -551,39 +549,63 @@ with tab_resumo:
             -get_num_stat(x, 'OVERALL')
         ))
 
-        df_resumo = pd.DataFrame(lista_sorted)
-        df_resumo['Nº'] = [st.session_state.numeros.get(p['K'], 0) for p in lista_sorted]
-        df_resumo['PREÇO (€)'] = [float(p.get('MARKET PRICE', 0.0)) for p in lista_sorted]
-        df_resumo['IDADE'] = [int(get_num_stat(p, 'AGE')) for p in lista_sorted]
-        df_resumo['ALTURA'] = [f"{int(get_num_stat(p, 'HEIGHT'))}cm" for p in lista_sorted]
-        
-        def get_overall_emoji(val):
-            v = int(val)
-            if v >= 90: return f"🟢 {v}"
-            elif v >= 80: return f"🟡 {v}"
-            elif v >= 75: return f"🟠 {v}"
-            else: return f"🔴 {v}"
-            
-        df_resumo['OVERALL'] = [get_overall_emoji(get_num_stat(p, 'OVERALL')) for p in lista_sorted]
-        
-        cartas_list = []
+        def get_cat_name(p):
+            if p['T'] == 'RESERVA': return 'RESERVAS'
+            pos = str(p.get('P', '')).strip().upper()
+            if pos == 'GK': return 'GOLEIROS'
+            elif pos in ['CB', 'SWP', 'D', 'LB', 'LWB', 'RB', 'RWB', 'SB']: return 'DEFENSORES'
+            elif pos in ['DMF', 'CMF', 'SMF', 'RMF', 'LMF', 'AMF', 'M', 'WB']: return 'MEIO-CAMPO'
+            else: return 'ATACANTES'
+
+        final_table_data = []
+        current_cat = None
+
         for p in lista_sorted:
+            cat = get_cat_name(p)
+            
+            if cat != current_cat:
+                if current_cat is not None: # Insere a linha divisória (Zero Memória Extra)
+                    if cat == 'RESERVAS':
+                        sep_char = "▬▬▬▬▬" 
+                        title = "⬛ RESERVAS ⬛"
+                    else:
+                        sep_char = "═════" 
+                        title = f"🟦 {cat} 🟦"
+                        
+                    final_table_data.append({
+                        'Nº': sep_char, 'NOME': title, 'POSIÇÃO': sep_char,
+                        'IDADE': sep_char, 'ALTURA': sep_char, 'OVERALL': sep_char,
+                        'CARTAS': sep_char, 'PREÇO (€)': sep_char, 'STATUS': sep_char
+                    })
+                current_cat = cat
+                
+            v = int(get_num_stat(p, 'OVERALL'))
+            if v >= 90: ov_str = f"🟢 {v}"
+            elif v >= 80: ov_str = f"🟡 {v}"
+            elif v >= 75: ov_str = f"🟠 {v}"
+            else: ov_str = f"🔴 {v}"
+            
             c = sum(1 for h_nome, (col_name, _) in list(PLAYSTYLES.items()) + list(SKILLS.items()) if p.get(col_name) == 1)
-            cartas_list.append(f"{c} 🃏")
-        df_resumo['CARTAS'] = cartas_list
-        
-        colunas_exibicao = ['Nº', 'NAME', 'P', 'IDADE', 'ALTURA', 'OVERALL', 'CARTAS', 'PREÇO (€)', 'T']
-        df_display = df_resumo[colunas_exibicao].copy()
-        df_display.rename(columns={'NAME': 'NOME', 'P': 'POSIÇÃO', 'T': 'STATUS'}, inplace=True)
+            
+            final_table_data.append({
+                'Nº': str(st.session_state.numeros.get(p['K'], 0)),
+                'NOME': str(p.get('NAME', '')),
+                'POSIÇÃO': str(p.get('P', '')),
+                'IDADE': str(int(get_num_stat(p, 'AGE'))),
+                'ALTURA': f"{int(get_num_stat(p, 'HEIGHT'))}cm",
+                'OVERALL': ov_str,
+                'CARTAS': f"{c} 🃏",
+                'PREÇO (€)': f"€ {float(p.get('MARKET PRICE', 0.0)):.1f}",
+                'STATUS': str(p.get('T', ''))
+            })
+
+        df_display = pd.DataFrame(final_table_data)
         
         st.dataframe(
             df_display, 
             width="stretch", 
-            height=600,
-            hide_index=True,
-            column_config={
-                "PREÇO (€)": st.column_config.NumberColumn(format="€ %.1f")
-            }
+            height=660,
+            hide_index=True
         )
     else:
         st.info("Lista de jogadores vazia.")
@@ -741,7 +763,7 @@ if st.button("✅ ENVIAR INSCRIÇÃO", type="primary", width="stretch", disabled
             pdf.set_y(15)
             pdf.set_text_color(0, 0, 0)
             pdf.set_font("Arial", 'B', 14)
-            pdf.cell(0, 10, f"ESQUEMA TÁTICO: {formacao}", 0, 1, 'C')
+            pdf.cell(0, 10, f"ESQUEMA TATICO: {formacao}", 0, 1, 'C')
 
             # Agrupando os Titulares por linha
             gk_list, def_list, mid_list, atk_list = [], [], [], []
