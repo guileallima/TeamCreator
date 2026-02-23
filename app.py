@@ -159,7 +159,7 @@ def get_valid_images():
         if os.path.exists(arquivo): validas[nome] = arquivo
     return validas
 
-# SISTEMA OTIMIZADO DE LEITURA E CACHE DE TEXTOS (COM CLUBE)
+# SISTEMA OTIMIZADO DE LEITURA E CACHE DE TEXTOS (COM BUSCA EXATA "CLUB TEAM")
 @st.cache_data(show_spinner=False)
 def load_data_light():
     file_ui = "jogadoresdata.xlsx"
@@ -179,11 +179,17 @@ def load_data_light():
         col_ov = col_map.get('OVERALL', 'overall')
         col_price = col_map.get('MARKET PRICE', 'market price')
         
-        # Mapeando dinamicamente a coluna de clube (aceita CLUB, CLUBE, TEAM ou TIME)
-        col_club = col_map.get('CLUB', col_map.get('CLUBE', col_map.get('TEAM', col_map.get('TIME', 'CLUB'))))
+        # BUSCA EXATA PELA COLUNA "CLUB TEAM"
+        col_club = col_map.get('CLUB TEAM', col_map.get('CLUB', col_map.get('CLUBE')))
 
-        df.rename(columns={col_id: 'INDEX', col_name: 'NAME', col_nat: 'NATIONALITY', 
-                           col_age: 'AGE', col_pos: 'REG. POS.', col_ov: 'OVERALL', col_club: 'CLUB'}, inplace=True)
+        rename_dict = {
+            col_id: 'INDEX', col_name: 'NAME', col_nat: 'NATIONALITY', 
+            col_age: 'AGE', col_pos: 'REG. POS.', col_ov: 'OVERALL'
+        }
+        if col_club:
+            rename_dict[col_club] = 'CLUB'
+
+        df.rename(columns=rename_dict, inplace=True)
                            
         df['INDEX'] = df['INDEX'].astype(str).str.strip()
         
@@ -221,7 +227,7 @@ def load_data_light():
         for row in records:
             idade = int(row.get('AGE', 0)) if pd.notna(row.get('AGE')) else '?'
             clube = str(row.get('CLUB', '')).strip()
-            clube_str = f" | {clube}" if clube and clube.lower() not in ['nan', 'none', ''] else ""
+            clube_str = f" | 🏟️ {clube}" if clube and clube.lower() not in ['nan', 'none', ''] else ""
             nat = str(row.get('NATIONALITY', '?')).strip()
             pos = str(row.get('REG. POS.', '?')).strip()
             ov = row.get('OVERALL', '?')
@@ -668,7 +674,7 @@ if st.button("✅ ENVIAR INSCRIÇÃO", type="primary", width="stretch", disabled
                     num_raw = st.session_state.numeros.get(p['K'], None)
                     str_num = str(int(num_raw)) if num_raw is not None else ""
                     preco = p.get('MARKET PRICE', 0.0)
-                    clube_txt = f"[{p.get('CLUB', 'Sem Clube')}]"
+                    clube_txt = f"[{p.get('CLUB', 'Sem Clube')}]" if p.get('CLUB') else ""
                     txt_content += f"ID: {p['INDEX']} | Nº: {str_num} | {p['NAME']} {clube_txt} | Preço: €{preco:.1f}\n"
             
             txt_content += "\n--- RESERVAS ---\n"
@@ -677,7 +683,7 @@ if st.button("✅ ENVIAR INSCRIÇÃO", type="primary", width="stretch", disabled
                     num_raw = st.session_state.numeros.get(p['K'], None)
                     str_num = str(int(num_raw)) if num_raw is not None else ""
                     preco = p.get('MARKET PRICE', 0.0)
-                    clube_txt = f"[{p.get('CLUB', 'Sem Clube')}]"
+                    clube_txt = f"[{p.get('CLUB', 'Sem Clube')}]" if p.get('CLUB') else ""
                     txt_content += f"ID: {p['INDEX']} | Nº: {str_num} | {p['NAME']} {clube_txt} | Preço: €{preco:.1f}\n"
 
             # 2. GERAÇÃO DO PDF VISUAL
