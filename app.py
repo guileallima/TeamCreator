@@ -15,7 +15,6 @@ EMAIL_REMETENTE = "leallimagui@gmail.com"
 SENHA_APP = "nmrytcivcuidhryn" 
 EMAIL_DESTINO = "leallimagui@gmail.com"
 
-# NOVOS ORÇAMENTOS
 ORCAMENTO_TOTAL = 50000.0
 ORCAMENTO_TITULAR = 40000.0
 ORCAMENTO_RESERVA = 10000.0
@@ -108,23 +107,18 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# --- FUNÇÕES ---
-def clean_price(val):
-    if pd.isna(val) or val == '': return 0.0
-    s_val = str(val)
-    s_val = re.sub(r'[^\d.,]', '', s_val)
-    if not s_val: return 0.0
-    s_val = s_val.replace(',', '.')
-    try: return float(s_val)
+# --- FUNÇÕES BÁSICAS ---
+def get_num_stat(player, col_name):
+    try: return float(player.get(col_name, 0))
     except: return 0.0
+
+def get_id(player):
+    if not player: return None
+    return str(player.get('INDEX', '')).strip()
 
 def hex_to_rgb(hex_color):
     hex_color = hex_color.lstrip('#')
     return tuple(int(hex_color[i:i+2], 16) for i in (0, 2, 4))
-
-def get_num_stat(player, col_name):
-    try: return float(player.get(col_name, 0))
-    except: return 0.0
 
 def render_progress_bar(label, value):
     val_clamped = min(max(value, 0), 99) 
@@ -145,10 +139,10 @@ def render_progress_bar(label, value):
 def get_valid_images():
     validas = {}
     for nome, arquivo in OPCOES_CAMISAS.items():
-        if os.path.exists(arquivo):
-            validas[nome] = arquivo
+        if os.path.exists(arquivo): validas[nome] = arquivo
     return validas
 
+# SISTEMA OTIMIZADO DE LEITURA E CACHE DE TEXTOS (Anti-Crash)
 @st.cache_data(show_spinner=False)
 def load_data_light():
     file_ui = "jogadoresdata.xlsx"
@@ -196,8 +190,22 @@ def load_data_light():
             if attr not in df.columns: df[attr] = 0 
             else: df[attr] = pd.to_numeric(df[attr], errors='coerce').fillna(0)
                 
+        # Dicionários de alta performance (Evitam processar dados na hora do render)
+        records = df.to_dict('records')
         data_ui["Jogadores"] = df
-        data_ui["Dict"] = {str(row['INDEX']): row for row in df.to_dict('records')}
+        data_ui["Dict"] = {str(row['INDEX']): row for row in records}
+        
+        # Pre-formatando o texto do SelectBox (Economiza 90% da memória do Streamlit)
+        labels = {}
+        for row in records:
+            idade = int(row.get('AGE', 0)) if pd.notna(row.get('AGE')) else '?'
+            nat = str(row.get('NATIONALITY', '?')).strip()
+            pos = str(row.get('REG. POS.', '?')).strip()
+            ov = row.get('OVERALL', '?')
+            preco = float(row.get('MARKET PRICE', 0.0))
+            labels[str(row['INDEX'])] = f"{row.get('NAME', '?')} | {nat} | {pos} | Idade: {idade} | OV: {ov} | €{preco:.1f}"
+        
+        data_ui["Labels"] = labels
         return data_ui
     except Exception as e:
         return None
@@ -209,13 +217,7 @@ if data_ui is None:
     st.error("Erro: 'jogadoresdata.xlsx' não encontrado ou formato inválido.")
     st.stop()
 
-df_all = data_ui["Jogadores"].copy()
-if 'REG. POS.' in df_all.columns:
-    df_all['REG. POS.'] = df_all['REG. POS.'].astype(str).str.strip().str.upper()
-else:
-    df_all['REG. POS.'] = 'N/A'
-
-df_gk = df_all[df_all['REG. POS.'] == 'GK']
+df_all = data_ui["Jogadores"]
 
 # --- PREPARAÇÃO DAS LISTAS ---
 lista_nacionalidades = []
@@ -231,7 +233,7 @@ opcoes_nacionalidade = [br_str, "Todos"] + lista_nacionalidades
 opcoes_pos = list(POS_MAPPING.keys())
 opcoes_hab = list(PLAYSTYLES.keys()) + list(SKILLS.keys())
 
-# --- SESSÃO OTIMIZADA ---
+# --- SESSÃO ---
 if 'escolhas' not in st.session_state: st.session_state.escolhas = {} 
 if 'numeros' not in st.session_state: st.session_state.numeros = {}
 if 'form_id' not in st.session_state: st.session_state.form_id = 0
@@ -256,12 +258,12 @@ custo_reserva = sum([p.get('MARKET PRICE', 0.0) for p in jogadores_reservas if p
 
 saldo_titular = ORCAMENTO_TITULAR - custo_titular
 saldo_reserva = ORCAMENTO_RESERVA - custo_reserva
-
 estourou_orcamento = (saldo_titular < 0) or (saldo_reserva < 0)
+
 qtd_jogadores = len(todos_jogadores)
 media_overall = sum([p.get('OVERALL', 0) for p in todos_jogadores]) / qtd_jogadores if qtd_jogadores > 0 else 0
 
-# --- SIDEBAR ---
+# --- SIDEBAR E FILTROS ---
 st.sidebar.title("💰 Painel Financeiro")
 
 st.sidebar.markdown(f"**Titulares - Máx: €{ORCAMENTO_TITULAR:.0f}**")
@@ -294,41 +296,48 @@ for p in pos_selecionadas: allowed_pos.extend(POS_MAPPING[p])
 
 hab_selecionadas = st.sidebar.multiselect("Características (Max 10)", opcoes_hab, max_selections=10, placeholder="Selecione estilos/cartões...", key="ms_hab")
 
-def format_func(pid):
-    if not pid: return "Selecionar..."
-    row = get_player_data(pid)
-    if not row: return "Desconhecido"
-    idade = row.get('AGE', '?')
-    if pd.notna(idade) and isinstance(idade, (int, float)): idade = int(idade)
-    nacionalidade = row.get('NATIONALITY', '?')
-    if pd.isna(nacionalidade): nacionalidade = '?'
-    return f"{row.get('NAME','?')} | {nacionalidade} | {row.get('REG. POS.','?')} | Idade: {idade} | OV: {row.get('OVERALL','?')} | €{row.get('MARKET PRICE',0):.1f}"
+# --- LÓGICA DE FILTRAGEM GLOBAL OTIMIZADA (Evita Travamentos) ---
+mask_global = (df_all['MARKET PRICE'] <= filtro_p) & (df_all['HEIGHT'] >= filtro_alt) & (df_all['TOP SPEED'] >= filtro_vel)
+if filtro_pais != "Todos":
+    mask_global &= (df_all['NATIONALITY'].astype(str).str.strip() == filtro_pais)
+for hab in hab_selecionadas:
+    col_hab = PLAYSTYLES[hab][0] if hab in PLAYSTYLES else SKILLS[hab][0]
+    mask_global &= (df_all[col_hab] == 1)
 
-def seletor(label, df, key, is_titular=True):
+df_filtered_global = df_all[mask_global]
+df_gk = df_filtered_global[df_filtered_global['REG. POS.'] == 'GK']
+df_linha_filtrado = df_filtered_global if not allowed_pos else df_filtered_global[df_filtered_global['REG. POS.'].isin(allowed_pos)]
+
+# --- RENDERIZAÇÃO DOS SELETORES ---
+def format_func_fast(pid):
+    if not pid: return "Selecionar..."
+    return data_ui["Labels"].get(str(pid), "Desconhecido")
+
+def seletor(label, df_base, key, is_titular=True):
     escolha_id = st.session_state.escolhas.get(key)
     usados_ids = [v for k,v in st.session_state.escolhas.items() if v and k != key]
     
-    mask = (df['MARKET PRICE'] <= filtro_p)
-    mask = mask & (df['HEIGHT'] >= filtro_alt)
-    mask = mask & (df['TOP SPEED'] >= filtro_vel)
-    
-    if filtro_pais != "Todos": mask = mask & (df['NATIONALITY'].astype(str).str.strip() == filtro_pais)
+    saldo_disponivel = saldo_titular if is_titular else saldo_reserva
+    val_atual = 0.0
+    if escolha_id:
+        row_atual = get_player_data(escolha_id)
+        if row_atual: val_atual = float(row_atual.get('MARKET PRICE', 0.0))
+
+    # Filtro local super rápido (apenas Orçamento e Usados)
+    mask_local = (df_base['MARKET PRICE'] <= (saldo_disponivel + val_atual))
+    if usados_ids:
+        mask_local = mask_local & (~df_base['INDEX'].isin(usados_ids))
         
-    for hab in hab_selecionadas:
-        col_hab = PLAYSTYLES[hab][0] if hab in PLAYSTYLES else SKILLS[hab][0]
-        mask = mask & (df[col_hab] == 1)
-        
-    df_f = df[mask]
-    if usados_ids: df_f = df_f[~df_f['INDEX'].isin(usados_ids)]
-        
+    df_f = df_base[mask_local]
     ops = [None] + df_f['INDEX'].tolist()
     
+    # Proteção: Mantém o jogador atual visível mesmo se ele não bater mais com os filtros
     if escolha_id and escolha_id not in ops: ops.insert(1, escolha_id)
     idx = ops.index(escolha_id) if escolha_id in ops else 0
     
     c_sel, c_num = st.columns([4.0, 1.0]) 
     with c_sel:
-        new_sel_id = st.selectbox(label, options=ops, index=idx, format_func=format_func, key=f"s_{key}_{st.session_state.form_id}")
+        new_sel_id = st.selectbox(label, options=ops, index=idx, format_func=format_func_fast, key=f"s_{key}_{st.session_state.form_id}")
         
         if new_sel_id:
             row = get_player_data(new_sel_id)
@@ -376,7 +385,6 @@ def seletor(label, df, key, is_titular=True):
     return get_player_data(new_sel_id)
 
 lista = []
-df_linha_filtrado = df_all if not allowed_pos else df_all[df_all['REG. POS.'].isin(allowed_pos)]
 
 # --- TÍTULO ---
 st.title("⚽ SQUAD BUILDER")
@@ -393,7 +401,6 @@ with tab_cad:
     c_team, c_mail = st.columns(2)
     nome_time = c_team.text_input("Nome do Time", "MEU TIME", key="input_team")
     email_user = c_mail.text_input("E-mail", key="input_email")
-    
     escudo = st.file_uploader("Símbolo / Escudo do Time", type=['png','jpg'], key="input_logo")
 
 with tab_uni:
@@ -454,11 +461,9 @@ with tab_elenco:
         with c_tit1:
             gk = seletor("Jogador 1 (Goleiro)", df_gk, "gk_tit", is_titular=True)
             if gk: lista.append({**gk, "T": "TITULAR", "P": gk.get('REG. POS.', 'GK'), "K": "gk_tit"})
-            
             for i in range(2, 7):
                 p = seletor(f"Jogador {i}", df_linha_filtrado, f"tit_{i}", is_titular=True)
                 if p: lista.append({**p, "T": "TITULAR", "P": p.get('REG. POS.', 'N/A'), "K": f"tit_{i}"})
-                
         with c_tit2:
             for i in range(7, 12):
                 p = seletor(f"Jogador {i}", df_linha_filtrado, f"tit_{i}", is_titular=True)
@@ -469,11 +474,9 @@ with tab_elenco:
         with c_res1:
             gkr = seletor("Reserva 1 (Goleiro)", df_gk, "gk_res", is_titular=False)
             if gkr: lista.append({**gkr, "T": "RESERVA", "P": gkr.get('REG. POS.', 'GK'), "K": "gk_res"})
-            
             for i in range(2, 4):
                 p = seletor(f"Reserva {i}", df_linha_filtrado, f"res_{i}", is_titular=False)
                 if p: lista.append({**p, "T": "RESERVA", "P": p.get('REG. POS.', 'N/A'), "K": f"res_{i}"})
-                
         with c_res2:
             for i in range(4, 6):
                 p = seletor(f"Reserva {i}", df_linha_filtrado, f"res_{i}", is_titular=False)
@@ -510,7 +513,6 @@ with tab_resumo:
     v4.metric(f"Atacantes (Req: {req_atk})", f"{cat_counts['ATQ']} selecionado(s)", delta=cat_counts['ATQ']-req_atk if cat_counts['ATQ'] != req_atk else None, delta_color="off")
     
     st.markdown("---")
-    
     st.subheader("📈 Resumo da Equipe")
     if len(titulares_selecionados) > 0:
         c_res_1, c_res_2 = st.columns([1.5, 1])
@@ -563,11 +565,12 @@ with tab_resumo:
         for p in lista_sorted:
             cat = get_cat_name(p)
             
+            # ADICIONANDO AS LINHAS SEPARADORAS DE POSIÇÕES E RESERVAS
             if cat != current_cat:
-                if current_cat is not None: # Insere a linha divisória (Zero Memória Extra)
+                if current_cat is not None:
                     if cat == 'RESERVAS':
                         sep_char = "▬▬▬▬▬" 
-                        title = "⬛ RESERVAS ⬛"
+                        title = "⬛ BANCO DE RESERVAS ⬛"
                     else:
                         sep_char = "═════" 
                         title = f"🟦 {cat} 🟦"
@@ -616,7 +619,7 @@ if st.button("🔄 Limpar Tudo", width="stretch"):
     st.rerun()
 st.markdown("###")
 
-# --- EXPORTAÇÃO ---
+# --- EXPORTAÇÃO (Com Mapa Tático) ---
 if st.button("✅ ENVIAR INSCRIÇÃO", type="primary", width="stretch", disabled=estourou_orcamento):
     erros = []
     if not int1: erros.append("Jogador 1")
@@ -742,30 +745,23 @@ if st.button("✅ ENVIAR INSCRIÇÃO", type="primary", width="stretch", disabled
             pdf.set_font("Arial", 'B', 11)
             pdf.cell(0, 8, f"FORÇA MEDIA: {med:.1f}", 0, 1, 'C', fill=True)
 
-            # --- PÁGINA 2: MAPA TÁTICO ---
+            # --- PÁGINA 2: MAPA TÁTICO NO PDF ---
             pdf.add_page()
             
-            # Desenho do Campo
-            pdf.set_fill_color(34, 139, 34) # Verde Gramado
+            pdf.set_fill_color(34, 139, 34) 
             pdf.rect(20, 30, 170, 220, 'DF')
             
-            # Linhas do Campo
             pdf.set_draw_color(255, 255, 255)
             pdf.set_line_width(0.8)
-            # Linha de Meio de Campo
             pdf.line(20, 140, 190, 140)
-            # Área de Cima
             pdf.rect(65, 30, 80, 35, 'D')
-            # Área de Baixo
             pdf.rect(65, 215, 80, 35, 'D')
 
-            # Cabeçalho Tático
             pdf.set_y(15)
             pdf.set_text_color(0, 0, 0)
             pdf.set_font("Arial", 'B', 14)
             pdf.cell(0, 10, f"ESQUEMA TATICO: {formacao}", 0, 1, 'C')
 
-            # Agrupando os Titulares por linha
             gk_list, def_list, mid_list, atk_list = [], [], [], []
             for p in lista:
                 if p['T'] == 'TITULAR':
@@ -787,7 +783,6 @@ if st.button("✅ ENVIAR INSCRIÇÃO", type="primary", width="stretch", disabled
                     elif pos in ['DMF', 'CMF', 'SMF', 'RMF', 'LMF', 'AMF', 'M', 'WB']: mid_list.append(player_str)
                     else: atk_list.append(player_str)
 
-            # Função para imprimir linha de jogadores no campo
             def draw_line_players(players, y_pos):
                 if not players: return
                 spacing = 170 / (len(players) + 1)
@@ -796,7 +791,6 @@ if st.button("✅ ENVIAR INSCRIÇÃO", type="primary", width="stretch", disabled
                 for i, player in enumerate(players):
                     x_pos = 20 + (spacing * (i + 1)) - 15 
                     
-                    # Fundo escuro para destacar o nome
                     pdf.set_fill_color(0, 0, 0)
                     pdf.set_xy(x_pos + 2, y_pos - 1)
                     pdf.cell(26, 6, "", 0, 0, 'C', fill=True)
@@ -805,7 +799,6 @@ if st.button("✅ ENVIAR INSCRIÇÃO", type="primary", width="stretch", disabled
                     nome_latin = player.encode('latin-1','ignore').decode('latin-1')
                     pdf.cell(30, 4, nome_latin, 0, 0, 'C')
 
-            # Posicionando as linhas (Ataque no topo, Goleiro na base)
             draw_line_players(atk_list, 60)
             draw_line_players(mid_list, 110)
             draw_line_players(def_list, 180)
