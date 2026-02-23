@@ -125,6 +125,21 @@ def get_num_stat(player, col_name):
     try: return float(player.get(col_name, 0))
     except: return 0.0
 
+def render_progress_bar(label, value):
+    val_clamped = min(max(value, 0), 99) 
+    color = "#dc3545" if val_clamped >= 85 else ("#fd7e14" if val_clamped >= 75 else "#28a745")
+    st.markdown(f"""
+    <div style="margin-bottom: 8px;">
+        <div style="display: flex; justify-content: space-between; font-size: 0.85rem; font-weight: bold; margin-bottom: 2px; color: #444;">
+            <span>{label}</span>
+            <span>{val_clamped:.0f}</span>
+        </div>
+        <div style="width: 100%; background-color: #e9ecef; border-radius: 4px; height: 14px; overflow: hidden;">
+            <div style="width: {val_clamped}%; background-color: {color}; height: 100%; border-radius: 4px;"></div>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+
 @st.cache_data
 def get_valid_images():
     validas = {}
@@ -133,7 +148,6 @@ def get_valid_images():
             validas[nome] = arquivo
     return validas
 
-# SISTEMA OTIMIZADO DE LEITURA (Evita OOM no Servidor)
 @st.cache_data(show_spinner=False)
 def load_data_light():
     file_ui = "jogadoresdata.xlsx"
@@ -183,13 +197,11 @@ def load_data_light():
                 
         data_ui["Jogadores"] = df
         
-        # Criação de um Dicionário Rápido para não travar a memória
         data_ui["Dict"] = {str(row['INDEX']): row for row in df.to_dict('records')}
         return data_ui
     except Exception as e:
         return None
 
-# Load Inicial
 data_ui = load_data_light()
 valid_images = get_valid_images()
 
@@ -220,7 +232,7 @@ opcoes_pos = list(POS_MAPPING.keys())
 opcoes_hab = list(PLAYSTYLES.keys()) + list(SKILLS.keys())
 
 # --- SESSÃO OTIMIZADA ---
-if 'escolhas' not in st.session_state: st.session_state.escolhas = {} # Agora guarda apenas o ID do jogador
+if 'escolhas' not in st.session_state: st.session_state.escolhas = {} 
 if 'numeros' not in st.session_state: st.session_state.numeros = {}
 if 'form_id' not in st.session_state: st.session_state.form_id = 0
 if 'uni_titular_sel' not in st.session_state: st.session_state.uni_titular_sel = "Padrão 1"
@@ -282,7 +294,6 @@ for p in pos_selecionadas: allowed_pos.extend(POS_MAPPING[p])
 
 hab_selecionadas = st.sidebar.multiselect("Características (Max 10)", opcoes_hab, max_selections=10, placeholder="Selecione estilos/cartões...", key="ms_hab")
 
-# --- COMPONENTES AUXILIARES ---
 def format_func(pid):
     if not pid: return "Selecionar..."
     row = get_player_data(pid)
@@ -383,9 +394,7 @@ with tab_cad:
     nome_time = c_team.text_input("Nome do Time", "MEU TIME", key="input_team")
     email_user = c_mail.text_input("E-mail", key="input_email")
     
-    c_escudo, c_form = st.columns(2)
-    escudo = c_escudo.file_uploader("Escudo", type=['png','jpg'], key="input_logo")
-    formacao = c_form.selectbox("Formação Base", ["4-5-1", "3-4-3", "4-4-2", "4-3-3", "3-5-2"], key="input_fmt", help="Informativo. Usado para validar sua tática.")
+    escudo = st.file_uploader("Símbolo / Escudo do Time", type=['png','jpg'], key="input_logo")
 
 with tab_uni:
     st.subheader("Seleção de Uniformes")
@@ -436,6 +445,10 @@ with tab_uni:
     with tab_reserva_uni: kit_reserva = ui_uniforme("Reserva")
 
 with tab_elenco:
+    st.subheader("Esquema Tático")
+    formacao = st.selectbox("Formação Base", ["4-5-1", "3-4-3", "4-4-2", "4-3-3", "3-5-2"], key="input_fmt", help="Esta formação montará o desenho do seu campo no PDF.")
+    st.markdown("---")
+    
     with st.expander("🏟️ Titular", expanded=True):
         c_tit1, c_tit2 = st.columns(2)
         with c_tit1:
@@ -498,14 +511,29 @@ with tab_resumo:
     
     st.markdown("---")
     
-    # --- RESUMO SIMPLIFICADO ---
     st.subheader("📈 Resumo da Equipe")
     if len(titulares_selecionados) > 0:
-        avg_alt = sum([get_num_stat(p, 'HEIGHT') for p in titulares_selecionados]) / len(titulares_selecionados)
-        avg_idade = sum([get_num_stat(p, 'AGE') for p in titulares_selecionados]) / len(titulares_selecionados)
+        c_graf1, c_graf2 = st.columns(2)
         
-        st.markdown(f"#### ⭐ Força Média Geral (OVR): {media_overall:.1f}")
-        st.markdown(f"**Estatísticas Médias Físicas:** <br>📏 Altura: {avg_alt:.0f}cm &nbsp;&nbsp;|&nbsp;&nbsp; 🎂 Idade: {avg_idade:.1f} anos", unsafe_allow_html=True)
+        with c_graf1:
+            avg_atk = sum([(get_num_stat(p, 'ATTACK') + get_num_stat(p, 'SHOT ACCURACY')) / 2 for p in titulares_selecionados]) / len(titulares_selecionados)
+            avg_def = sum([(get_num_stat(p, 'DEFENCE') + get_num_stat(p, 'RESPONSE')) / 2 for p in titulares_selecionados]) / len(titulares_selecionados)
+            avg_vel = sum([(get_num_stat(p, 'TOP SPEED') + get_num_stat(p, 'EXPLOSIVE POWER')) / 2 for p in titulares_selecionados]) / len(titulares_selecionados)
+            avg_fis = sum([(get_num_stat(p, 'BODY BALANCE') + get_num_stat(p, 'STAMINA')) / 2 for p in titulares_selecionados]) / len(titulares_selecionados)
+            avg_tec = sum([(get_num_stat(p, 'BALL CONTROLL') + get_num_stat(p, 'SHORT PASS ACCURACY')) / 2 for p in titulares_selecionados]) / len(titulares_selecionados)
+            
+            avg_alt = sum([get_num_stat(p, 'HEIGHT') for p in titulares_selecionados]) / len(titulares_selecionados)
+            avg_idade = sum([get_num_stat(p, 'AGE') for p in titulares_selecionados]) / len(titulares_selecionados)
+            
+            st.markdown(f"#### ⭐ Força Média Geral (OVR): {media_overall:.1f}")
+            st.markdown(f"**Estatísticas Físicas:** 📏 Altura: {avg_alt:.0f}cm | 🎂 Idade: {avg_idade:.1f} anos", unsafe_allow_html=True)
+            st.markdown("<br>**Média de Atributos:**", unsafe_allow_html=True)
+            
+            render_progress_bar("Ataque", avg_atk)
+            render_progress_bar("Defesa", avg_def)
+            render_progress_bar("Velocidade", avg_vel)
+            render_progress_bar("Físico", avg_fis)
+            render_progress_bar("Técnica", avg_tec)
     else:
         st.info("Adicione jogadores na aba 'Elenco' para ver a análise.")
 
@@ -528,7 +556,6 @@ with tab_resumo:
         df_resumo['IDADE'] = [int(get_num_stat(p, 'AGE')) for p in lista_sorted]
         df_resumo['ALTURA'] = [f"{int(get_num_stat(p, 'HEIGHT'))}cm" for p in lista_sorted]
         
-        # Bolinhas coloridas de Status LEVES (No lugar do Pandas Style que travou tudo)
         def get_overall_emoji(val):
             v = int(val)
             if v >= 90: return f"🟢 {v}"
@@ -604,6 +631,8 @@ if st.button("✅ ENVIAR INSCRIÇÃO", type="primary", width="stretch", disabled
 
             # 2. GERAÇÃO DO PDF VISUAL
             pdf = FPDF()
+            
+            # --- PÁGINA 1: DADOS E TABELAS ---
             pdf.add_page()
             pdf.set_fill_color(20,20,20); pdf.rect(0,0,210,50,'F')
             
@@ -688,9 +717,78 @@ if st.button("✅ ENVIAR INSCRIÇÃO", type="primary", width="stretch", disabled
             med = s_tit/q_tit if q_tit > 0 else 0
             pdf.set_fill_color(50,50,50); pdf.set_text_color(255,255,255)
             pdf.set_font("Arial", 'B', 11)
-            pdf.cell(0, 8, f"FORÇA: {med:.1f}", 0, 1, 'C', fill=True)
+            pdf.cell(0, 8, f"FORÇA MEDIA: {med:.1f}", 0, 1, 'C', fill=True)
+
+            # --- PÁGINA 2: MAPA TÁTICO ---
+            pdf.add_page()
             
-            # EMAIL
+            # Desenho do Campo
+            pdf.set_fill_color(34, 139, 34) # Verde Gramado
+            pdf.rect(20, 30, 170, 220, 'DF')
+            
+            # Linhas do Campo
+            pdf.set_draw_color(255, 255, 255)
+            pdf.set_line_width(0.8)
+            # Linha de Meio de Campo
+            pdf.line(20, 140, 190, 140)
+            # Área de Cima
+            pdf.rect(65, 30, 80, 35, 'D')
+            # Área de Baixo
+            pdf.rect(65, 215, 80, 35, 'D')
+
+            # Cabeçalho Tático
+            pdf.set_y(15)
+            pdf.set_text_color(0, 0, 0)
+            pdf.set_font("Arial", 'B', 14)
+            pdf.cell(0, 10, f"ESQUEMA TÁTICO: {formacao}", 0, 1, 'C')
+
+            # Agrupando os Titulares por linha
+            gk_list, def_list, mid_list, atk_list = [], [], [], []
+            for p in lista:
+                if p['T'] == 'TITULAR':
+                    pos = str(p.get('P', '')).strip().upper()
+                    num = str(st.session_state.numeros.get(p['K'], ''))
+                    
+                    nome_completo = str(p.get('NAME', '')).split()
+                    nome_curto = nome_completo[0]
+                    if len(nome_completo) > 1 and len(nome_curto) < 6:
+                        nome_curto += f" {nome_completo[-1]}"
+                    if len(nome_curto) > 12:
+                        nome_curto = nome_curto[:10] + "."
+                    
+                    ovr = p.get('OVERALL', 0)
+                    player_str = f"{num}. {nome_curto} ({ovr})"
+
+                    if pos == 'GK': gk_list.append(player_str)
+                    elif pos in ['CB', 'SWP', 'D', 'LB', 'LWB', 'RB', 'RWB', 'SB']: def_list.append(player_str)
+                    elif pos in ['DMF', 'CMF', 'SMF', 'RMF', 'LMF', 'AMF', 'M', 'WB']: mid_list.append(player_str)
+                    else: atk_list.append(player_str)
+
+            # Função para imprimir linha de jogadores no campo
+            def draw_line_players(players, y_pos):
+                if not players: return
+                spacing = 170 / (len(players) + 1)
+                pdf.set_font("Arial", 'B', 8)
+                pdf.set_text_color(255, 255, 255)
+                for i, player in enumerate(players):
+                    x_pos = 20 + (spacing * (i + 1)) - 15 
+                    
+                    # Fundo escuro para destacar o nome
+                    pdf.set_fill_color(0, 0, 0)
+                    pdf.set_xy(x_pos + 2, y_pos - 1)
+                    pdf.cell(26, 6, "", 0, 0, 'C', fill=True)
+                    
+                    pdf.set_xy(x_pos, y_pos)
+                    nome_latin = player.encode('latin-1','ignore').decode('latin-1')
+                    pdf.cell(30, 4, nome_latin, 0, 0, 'C')
+
+            # Posicionando as linhas (Ataque no topo, Goleiro na base)
+            draw_line_players(atk_list, 60)
+            draw_line_players(mid_list, 110)
+            draw_line_players(def_list, 180)
+            draw_line_players(gk_list, 235)
+
+            # ENVIO DO EMAIL
             msg = MIMEMultipart()
             msg['From'], msg['To'] = EMAIL_REMETENTE, msg['To'] = EMAIL_DESTINO
             msg['Subject'] = f"Inscrição: {nome_time}"
