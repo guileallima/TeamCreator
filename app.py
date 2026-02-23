@@ -321,14 +321,15 @@ def seletor(label, df, key, is_titular=True):
     df_f = df[mask]
     if usados_ids: df_f = df_f[~df_f['INDEX'].isin(usados_ids)]
         
-    ops = df_f['INDEX'].tolist()
+    # INSERINDO A OPÇÃO VAZIA (None) DE FORMA PERMANENTE PARA GARANTIR A REMOÇÃO FÁCIL
+    ops = [None] + df_f['INDEX'].tolist()
     
-    if escolha_id and escolha_id not in ops: ops.insert(0, escolha_id)
-    idx = ops.index(escolha_id) if escolha_id in ops else None
+    if escolha_id and escolha_id not in ops: ops.insert(1, escolha_id)
+    idx = ops.index(escolha_id) if escolha_id in ops else 0
     
     c_sel, c_num = st.columns([4.0, 1.0]) 
     with c_sel:
-        new_sel_id = st.selectbox(label, options=ops, index=idx, format_func=format_func, placeholder="Selecionar jogador...", key=f"s_{key}_{st.session_state.form_id}")
+        new_sel_id = st.selectbox(label, options=ops, index=idx, format_func=format_func, key=f"s_{key}_{st.session_state.form_id}")
         
         if new_sel_id:
             row = get_player_data(new_sel_id)
