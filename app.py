@@ -15,7 +15,6 @@ EMAIL_REMETENTE = "leallimagui@gmail.com"
 SENHA_APP = "nmrytcivcuidhryn" 
 EMAIL_DESTINO = "leallimagui@gmail.com"
 
-# NOVOS ORÇAMENTOS
 ORCAMENTO_TOTAL = 50000.0
 ORCAMENTO_TITULAR = 40000.0
 ORCAMENTO_RESERVA = 10000.0
@@ -33,14 +32,6 @@ POS_MAPPING = {
     "Atacante": ["SS", "CF", "A"],
     "Ponta Esquerda": ["LWF", "WF"],
     "Ponta Direita": ["RWF"]
-}
-
-# Mapeamento para Agrupamento Financeiro (Gráficos)
-SECTORS = {
-    'GK': 'Goleiro',
-    'CB': 'Defesa', 'SWP': 'Defesa', 'D': 'Defesa', 'LB': 'Defesa', 'LWB': 'Defesa', 'RB': 'Defesa', 'RWB': 'Defesa', 'SB': 'Defesa',
-    'DMF': 'Meio-Campo', 'CMF': 'Meio-Campo', 'SMF': 'Meio-Campo', 'RMF': 'Meio-Campo', 'LMF': 'Meio-Campo', 'AMF': 'Meio-Campo', 'M': 'Meio-Campo', 'WB': 'Meio-Campo',
-    'SS': 'Ataque', 'CF': 'Ataque', 'A': 'Ataque', 'LWF': 'Ataque', 'WF': 'Ataque', 'RWF': 'Ataque'
 }
 
 # --- DICIONÁRIOS DE HABILIDADES ---
@@ -96,7 +87,7 @@ SKILLS = {
 
 st.set_page_config(page_title="Squad Builder PES 2013", layout="wide", initial_sidebar_state="expanded")
 
-# --- CSS PARA FORÇAR LAYOUT COMPACTO ---
+# --- CSS ---
 st.markdown("""
 <style>
     .block-container {padding-top: 1rem; padding-bottom: 1rem;}
@@ -108,18 +99,10 @@ st.markdown("""
         width: 100% !important; border-radius: 4px; padding: 2px 0px !important; font-size: 0.8rem; margin-top: -5px;
     }
     [data-testid="stImage"] img { border-radius: 5px; }
-    
     .mini-card-stats {
-        font-size: 0.75rem;
-        color: #444;
-        background-color: #f9f9f9;
-        padding: 6px 10px;
-        border-radius: 4px;
-        margin-top: -10px;
-        margin-bottom: 10px;
-        display: block;
-        border: 1px solid #ddd;
-        line-height: 1.4;
+        font-size: 0.75rem; color: #444; background-color: #f9f9f9; padding: 6px 10px;
+        border-radius: 4px; margin-top: -10px; margin-bottom: 10px; display: block;
+        border: 1px solid #ddd; line-height: 1.4;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -142,10 +125,6 @@ def get_num_stat(player, col_name):
     try: return float(player.get(col_name, 0))
     except: return 0.0
 
-def get_id(player):
-    if not player: return None
-    return str(player.get('INDEX', '')).strip()
-
 @st.cache_data
 def get_valid_images():
     validas = {}
@@ -154,6 +133,7 @@ def get_valid_images():
             validas[nome] = arquivo
     return validas
 
+# SISTEMA OTIMIZADO DE LEITURA (Evita OOM no Servidor)
 @st.cache_data(show_spinner=False)
 def load_data_light():
     file_ui = "jogadoresdata.xlsx"
@@ -202,6 +182,9 @@ def load_data_light():
             else: df[attr] = pd.to_numeric(df[attr], errors='coerce').fillna(0)
                 
         data_ui["Jogadores"] = df
+        
+        # Criação de um Dicionário Rápido para não travar a memória
+        data_ui["Dict"] = {str(row['INDEX']): row for row in df.to_dict('records')}
         return data_ui
     except Exception as e:
         return None
@@ -214,7 +197,6 @@ if data_ui is None:
     st.error("Erro: 'jogadoresdata.xlsx' não encontrado ou formato inválido.")
     st.stop()
 
-# Consolidação dos Dados e Preparação de Filtros
 df_all = data_ui["Jogadores"].copy()
 if 'REG. POS.' in df_all.columns:
     df_all['REG. POS.'] = df_all['REG. POS.'].astype(str).str.strip().str.upper()
@@ -223,7 +205,7 @@ else:
 
 df_gk = df_all[df_all['REG. POS.'] == 'GK']
 
-# --- PREPARAÇÃO DAS LISTAS DE OPÇÕES ---
+# --- PREPARAÇÃO DAS LISTAS ---
 lista_nacionalidades = []
 if 'NATIONALITY' in df_all.columns:
     lista_nacionalidades = df_all['NATIONALITY'].dropna().astype(str).str.strip().unique().tolist()
@@ -237,8 +219,8 @@ opcoes_nacionalidade = [br_str, "Todos"] + lista_nacionalidades
 opcoes_pos = list(POS_MAPPING.keys())
 opcoes_hab = list(PLAYSTYLES.keys()) + list(SKILLS.keys())
 
-# --- SESSÃO ---
-if 'escolhas' not in st.session_state: st.session_state.escolhas = {}
+# --- SESSÃO OTIMIZADA ---
+if 'escolhas' not in st.session_state: st.session_state.escolhas = {} # Agora guarda apenas o ID do jogador
 if 'numeros' not in st.session_state: st.session_state.numeros = {}
 if 'form_id' not in st.session_state: st.session_state.form_id = 0
 if 'uni_titular_sel' not in st.session_state: st.session_state.uni_titular_sel = "Padrão 1"
@@ -249,35 +231,36 @@ def reset_callback():
     st.session_state.numeros = {}
     st.session_state.form_id += 1
 
-jogadores_titulares = [p for k, p in st.session_state.escolhas.items() if p and ('tit' in k)]
-jogadores_reservas = [p for k, p in st.session_state.escolhas.items() if p and ('res' in k)]
-todos_jogadores = jogadores_titulares + jogadores_reservas
+def get_player_data(pid):
+    if not pid: return None
+    return data_ui["Dict"].get(str(pid))
 
-custo_titular = sum([p.get('MARKET PRICE', 0.0) for p in jogadores_titulares])
-custo_reserva = sum([p.get('MARKET PRICE', 0.0) for p in jogadores_reservas])
+jogadores_titulares = [get_player_data(pid) for k, pid in st.session_state.escolhas.items() if pid and ('tit' in k)]
+jogadores_reservas = [get_player_data(pid) for k, pid in st.session_state.escolhas.items() if pid and ('res' in k)]
+todos_jogadores = [p for p in jogadores_titulares + jogadores_reservas if p]
+
+custo_titular = sum([p.get('MARKET PRICE', 0.0) for p in jogadores_titulares if p])
+custo_reserva = sum([p.get('MARKET PRICE', 0.0) for p in jogadores_reservas if p])
 
 saldo_titular = ORCAMENTO_TITULAR - custo_titular
 saldo_reserva = ORCAMENTO_RESERVA - custo_reserva
 
 estourou_orcamento = (saldo_titular < 0) or (saldo_reserva < 0)
-
 qtd_jogadores = len(todos_jogadores)
 media_overall = sum([p.get('OVERALL', 0) for p in todos_jogadores]) / qtd_jogadores if qtd_jogadores > 0 else 0
 
-# --- SIDEBAR (PAINEL FINANCEIRO & FILTROS) ---
+# --- SIDEBAR ---
 st.sidebar.title("💰 Painel Financeiro")
 
 st.sidebar.markdown(f"**Titulares - Máx: €{ORCAMENTO_TITULAR:.0f}**")
-if saldo_titular < 0:
-    st.sidebar.error(f"❌ Estourado em €{abs(saldo_titular):.0f}")
+if saldo_titular < 0: st.sidebar.error(f"❌ Estourado em €{abs(saldo_titular):.0f}")
 m1, m2 = st.sidebar.columns(2)
 m1.metric("Gasto Titular", f"€{custo_titular:.0f}")
 m2.metric("Saldo Titular", f"€{saldo_titular:.0f}")
 st.sidebar.progress(min(max(custo_titular / ORCAMENTO_TITULAR, 0.0), 1.0))
 
 st.sidebar.markdown(f"**Reservas - Máx: €{ORCAMENTO_RESERVA:.0f}**")
-if saldo_reserva < 0:
-    st.sidebar.error(f"❌ Estourado em €{abs(saldo_reserva):.0f}")
+if saldo_reserva < 0: st.sidebar.error(f"❌ Estourado em €{abs(saldo_reserva):.0f}")
 m3, m4 = st.sidebar.columns(2)
 m3.metric("Gasto Reserva", f"€{custo_reserva:.0f}")
 m4.metric("Saldo Reserva", f"€{saldo_reserva:.0f}")
@@ -290,93 +273,59 @@ filtro_p = st.sidebar.number_input("Preço Máx. Filtro (€)", 0.0, 100000.0, 5
 filtro_pais = st.sidebar.selectbox("Nacionalidade", opcoes_nacionalidade, index=1, key="input_pais")
 
 c_alt, c_vel = st.sidebar.columns(2)
-with c_alt:
-    filtro_alt = st.number_input("Altura Mín. (cm)", 100, 220, 150, 5, key="input_alt")
-with c_vel:
-    filtro_vel = st.number_input("Vel. Mínima", 40, 99, 40, 5, key="input_vel", help="Filtra por Top Speed")
+with c_alt: filtro_alt = st.number_input("Altura Mín. (cm)", 100, 220, 150, 5, key="input_alt")
+with c_vel: filtro_vel = st.number_input("Vel. Mínima", 40, 99, 40, 5, key="input_vel", help="Filtra por Top Speed")
 
 pos_selecionadas = st.sidebar.multiselect("Posição (Linha)", opcoes_pos, placeholder="Selecione as posições...", key="ms_pos")
 allowed_pos = []
-for p in pos_selecionadas:
-    allowed_pos.extend(POS_MAPPING[p])
+for p in pos_selecionadas: allowed_pos.extend(POS_MAPPING[p])
 
 hab_selecionadas = st.sidebar.multiselect("Características (Max 10)", opcoes_hab, max_selections=10, placeholder="Selecione estilos/cartões...", key="ms_hab")
 
-with st.sidebar.expander("📖 O que cada característica faz?"):
-    st.markdown("**Estilo de Jogo (Playstyles)**")
-    for h_nome, (_, desc) in PLAYSTYLES.items():
-        st.markdown(f"<span style='font-size: 0.8rem;'><b>{h_nome}:</b> {desc}</span>", unsafe_allow_html=True)
-        
-    st.markdown("<br>**Cartões de Habilidade (Skills)**", unsafe_allow_html=True)
-    for h_nome, (_, desc) in SKILLS.items():
-        st.markdown(f"<span style='font-size: 0.8rem;'><b>{h_nome}:</b> {desc}</span>", unsafe_allow_html=True)
-
 # --- COMPONENTES AUXILIARES ---
-def format_func(row):
+def format_func(pid):
+    if not pid: return "Selecionar..."
+    row = get_player_data(pid)
+    if not row: return "Desconhecido"
     idade = row.get('AGE', '?')
     if pd.notna(idade) and isinstance(idade, (int, float)): idade = int(idade)
     nacionalidade = row.get('NATIONALITY', '?')
     if pd.isna(nacionalidade): nacionalidade = '?'
     return f"{row.get('NAME','?')} | {nacionalidade} | {row.get('REG. POS.','?')} | Idade: {idade} | OV: {row.get('OVERALL','?')} | €{row.get('MARKET PRICE',0):.1f}"
 
-def render_progress_bar(label, value):
-    val_clamped = min(max(value, 0), 99) 
-    color = "#dc3545" if val_clamped >= 85 else ("#fd7e14" if val_clamped >= 75 else "#28a745")
-    st.markdown(f"""
-    <div style="margin-bottom: 8px;">
-        <div style="display: flex; justify-content: space-between; font-size: 0.85rem; font-weight: bold; margin-bottom: 2px; color: #444;">
-            <span>{label}</span>
-            <span>{val_clamped:.0f}</span>
-        </div>
-        <div style="width: 100%; background-color: #e9ecef; border-radius: 4px; height: 14px; overflow: hidden;">
-            <div style="width: {val_clamped}%; background-color: {color}; height: 100%; border-radius: 4px;"></div>
-        </div>
-    </div>
-    """, unsafe_allow_html=True)
-
 def seletor(label, df, key, is_titular=True):
-    escolha = st.session_state.escolhas.get(key)
-    
-    usados_ids = [get_id(v) for k,v in st.session_state.escolhas.items() if v and k != key]
+    escolha_id = st.session_state.escolhas.get(key)
+    usados_ids = [v for k,v in st.session_state.escolhas.items() if v and k != key]
     
     mask = (df['MARKET PRICE'] <= filtro_p)
     mask = mask & (df['HEIGHT'] >= filtro_alt)
     mask = mask & (df['TOP SPEED'] >= filtro_vel)
     
-    if filtro_pais != "Todos":
-        mask = mask & (df['NATIONALITY'].astype(str).str.strip() == filtro_pais)
+    if filtro_pais != "Todos": mask = mask & (df['NATIONALITY'].astype(str).str.strip() == filtro_pais)
         
     for hab in hab_selecionadas:
-        if hab in PLAYSTYLES: col_hab = PLAYSTYLES[hab][0]
-        else: col_hab = SKILLS[hab][0]
+        col_hab = PLAYSTYLES[hab][0] if hab in PLAYSTYLES else SKILLS[hab][0]
         mask = mask & (df[col_hab] == 1)
         
     df_f = df[mask]
-    if usados_ids: 
-        df_f = df_f[~df_f['INDEX'].isin(usados_ids)]
+    if usados_ids: df_f = df_f[~df_f['INDEX'].isin(usados_ids)]
         
-    ops = df_f.to_dict('records')
+    ops = df_f['INDEX'].tolist()
     
-    if escolha:
-        if not any(get_id(o) == get_id(escolha) for o in ops):
-            ops.insert(0, escolha)
-    
-    idx = None
-    if escolha:
-        for i, o in enumerate(ops): 
-            if get_id(o) == get_id(escolha): 
-                idx = i; break
+    if escolha_id and escolha_id not in ops: ops.insert(0, escolha_id)
+    idx = ops.index(escolha_id) if escolha_id in ops else None
     
     c_sel, c_num = st.columns([4.0, 1.0]) 
     with c_sel:
-        new_sel = st.selectbox(label, options=ops, index=idx, format_func=format_func, placeholder="Selecionar jogador...", key=f"s_{key}_{st.session_state.form_id}")
+        new_sel_id = st.selectbox(label, options=ops, index=idx, format_func=format_func, placeholder="Selecionar jogador...", key=f"s_{key}_{st.session_state.form_id}")
         
-        if new_sel:
-            pos = new_sel.get('REG. POS.', '').strip().upper()
-            alt = int(new_sel.get('HEIGHT', 0)) if pd.notna(new_sel.get('HEIGHT')) else '-'
+        if new_sel_id:
+            row = get_player_data(new_sel_id)
+            pos = row.get('REG. POS.', '').strip().upper()
+            alt = int(row.get('HEIGHT', 0)) if pd.notna(row.get('HEIGHT')) else '-'
             
             def get_stat(col): 
-                val = new_sel.get(col, '-')
+                val = row.get(col, '-')
                 return int(val) if pd.notna(val) and isinstance(val, (int, float)) else val
             
             if pos in ['GK']: stats_str = f"📏 ALT: {alt}cm | 🧤 HAB: {get_stat('GOAL KEEPING SKILLS')} | ⚡ RES: {get_stat('RESPONSE')} | 🛡️ DEF: {get_stat('DEFENCE')} | 🦘 SAL: {get_stat('JUMP')} | ⚖️ EQU: {get_stat('BODY BALANCE')}"
@@ -390,8 +339,7 @@ def seletor(label, df, key, is_titular=True):
             
             habs_ativas = []
             for h_nome, (col_name, _) in list(PLAYSTYLES.items()) + list(SKILLS.items()):
-                if new_sel.get(col_name) == 1:
-                    habs_ativas.append(h_nome)
+                if row.get(col_name) == 1: habs_ativas.append(h_nome)
             
             habs_str = " | ".join(habs_ativas) if habs_ativas else "Nenhuma"
             
@@ -408,13 +356,13 @@ def seletor(label, df, key, is_titular=True):
         new_n = st.number_input("Nº", min_value=0, max_value=99, value=val_n, step=1, key=f"n_{key}_{st.session_state.form_id}")
         st.session_state.numeros[key] = new_n
 
-    if get_id(new_sel) != get_id(escolha):
-        st.session_state.escolhas[key] = new_sel
-        if new_sel is None and key in st.session_state.numeros:
+    if new_sel_id != escolha_id:
+        st.session_state.escolhas[key] = new_sel_id
+        if not new_sel_id and key in st.session_state.numeros:
             st.session_state.numeros[key] = 0
         st.rerun()
         
-    return new_sel
+    return get_player_data(new_sel_id)
 
 lista = []
 df_linha_filtrado = df_all if not allowed_pos else df_all[df_all['REG. POS.'].isin(allowed_pos)]
@@ -526,20 +474,12 @@ with tab_resumo:
     mid_pos = ['DMF', 'CMF', 'SMF', 'RMF', 'LMF', 'AMF', 'M', 'WB']
     atk_pos = ['SS', 'CF', 'A', 'LWF', 'WF', 'RWF']
     
-    gastos_setor = {'Goleiro': 0.0, 'Defesa': 0.0, 'Meio-Campo': 0.0, 'Ataque': 0.0}
-    
     for p in titulares_selecionados:
         pos_limpa = str(p.get('P', '')).strip().upper()
         if pos_limpa == 'GK': cat_counts['GK'] += 1
         elif pos_limpa in def_pos: cat_counts['DEF'] += 1
         elif pos_limpa in mid_pos: cat_counts['MID'] += 1
         elif pos_limpa in atk_pos: cat_counts['ATQ'] += 1
-        
-    for p in lista:
-        pos_limpa = str(p.get('P', '')).strip().upper()
-        preco = get_num_stat(p, 'MARKET PRICE')
-        setor = SECTORS.get(pos_limpa, 'Goleiro')
-        gastos_setor[setor] += preco
 
     partes_formacao = formacao.split('-')
     req_def, req_mid, req_atk = int(partes_formacao[0]), int(partes_formacao[1]), int(partes_formacao[2])
@@ -550,8 +490,6 @@ with tab_resumo:
         st.warning("⚠️ **Aviso:** Há jogadores com números de camisa repetidos no seu elenco!")
 
     st.subheader("📋 Validação Tática (Equipe Titular)")
-    st.caption(f"Comparando seus jogadores escolhidos com a formação base selecionada: **{formacao}**")
-    
     v1, v2, v3, v4 = st.columns(4)
     v1.metric("Goleiro (Req: 1)", f"{cat_counts['GK']} selecionado(s)", delta=cat_counts['GK']-1 if cat_counts['GK'] != 1 else None, delta_color="off")
     v2.metric(f"Defensores (Req: {req_def})", f"{cat_counts['DEF']} selecionado(s)", delta=cat_counts['DEF']-req_def if cat_counts['DEF'] != req_def else None, delta_color="off")
@@ -560,45 +498,16 @@ with tab_resumo:
     
     st.markdown("---")
     
-    st.subheader("📈 Análise do Elenco Titular")
+    # --- RESUMO SIMPLIFICADO ---
+    st.subheader("📈 Resumo da Equipe")
     if len(titulares_selecionados) > 0:
-        c_graf1, c_graf2 = st.columns(2)
+        avg_alt = sum([get_num_stat(p, 'HEIGHT') for p in titulares_selecionados]) / len(titulares_selecionados)
+        avg_idade = sum([get_num_stat(p, 'AGE') for p in titulares_selecionados]) / len(titulares_selecionados)
         
-        with c_graf1:
-            avg_atk = sum([(get_num_stat(p, 'ATTACK') + get_num_stat(p, 'SHOT ACCURACY')) / 2 for p in titulares_selecionados]) / len(titulares_selecionados)
-            avg_def = sum([(get_num_stat(p, 'DEFENCE') + get_num_stat(p, 'RESPONSE')) / 2 for p in titulares_selecionados]) / len(titulares_selecionados)
-            avg_vel = sum([(get_num_stat(p, 'TOP SPEED') + get_num_stat(p, 'EXPLOSIVE POWER')) / 2 for p in titulares_selecionados]) / len(titulares_selecionados)
-            avg_fis = sum([(get_num_stat(p, 'BODY BALANCE') + get_num_stat(p, 'STAMINA')) / 2 for p in titulares_selecionados]) / len(titulares_selecionados)
-            avg_tec = sum([(get_num_stat(p, 'BALL CONTROLL') + get_num_stat(p, 'SHORT PASS ACCURACY')) / 2 for p in titulares_selecionados]) / len(titulares_selecionados)
-            
-            avg_alt = sum([get_num_stat(p, 'HEIGHT') for p in titulares_selecionados]) / len(titulares_selecionados)
-            avg_idade = sum([get_num_stat(p, 'AGE') for p in titulares_selecionados]) / len(titulares_selecionados)
-            
-            st.markdown(f"#### ⭐ Força Média Geral (OVR): {media_overall:.1f}")
-            st.markdown(f"**Estatísticas Médias Físicas:** <br>📏 Altura: {avg_alt:.0f}cm &nbsp;&nbsp;|&nbsp;&nbsp; 🎂 Idade: {avg_idade:.1f} anos", unsafe_allow_html=True)
-            st.markdown("<br>**Média de Atributos:**", unsafe_allow_html=True)
-            
-            render_progress_bar("Ataque", avg_atk)
-            render_progress_bar("Defesa", avg_def)
-            render_progress_bar("Velocidade", avg_vel)
-            render_progress_bar("Físico", avg_fis)
-            render_progress_bar("Técnica", avg_tec)
-
-        with c_graf2:
-            st.markdown("**Distribuição de Orçamento por Setor**")
-            df_budget = pd.DataFrame({
-                'Setor': list(gastos_setor.keys()),
-                'Gasto (€)': list(gastos_setor.values())
-            })
-            df_budget = df_budget[df_budget['Gasto (€)'] > 0]
-            
-            if not df_budget.empty:
-                df_budget.set_index('Setor', inplace=True)
-                st.bar_chart(df_budget, height=300, width="stretch")
-            else:
-                st.info("Nenhum orçamento gasto ainda.")
+        st.markdown(f"#### ⭐ Força Média Geral (OVR): {media_overall:.1f}")
+        st.markdown(f"**Estatísticas Médias Físicas:** <br>📏 Altura: {avg_alt:.0f}cm &nbsp;&nbsp;|&nbsp;&nbsp; 🎂 Idade: {avg_idade:.1f} anos", unsafe_allow_html=True)
     else:
-        st.info("Adicione jogadores na aba 'Elenco' para ver os gráficos de análise.")
+        st.info("Adicione jogadores na aba 'Elenco' para ver a análise.")
 
     st.markdown("---")
     st.subheader("📋 Tabela Geral do Plantel")
@@ -619,7 +528,7 @@ with tab_resumo:
         df_resumo['IDADE'] = [int(get_num_stat(p, 'AGE')) for p in lista_sorted]
         df_resumo['ALTURA'] = [f"{int(get_num_stat(p, 'HEIGHT'))}cm" for p in lista_sorted]
         
-        # --- NOVO SISTEMA DE CORES LEVE (Sem Pandas Style) ---
+        # Bolinhas coloridas de Status LEVES (No lugar do Pandas Style que travou tudo)
         def get_overall_emoji(val):
             v = int(val)
             if v >= 90: return f"🟢 {v}"
@@ -639,11 +548,10 @@ with tab_resumo:
         df_display = df_resumo[colunas_exibicao].copy()
         df_display.rename(columns={'NAME': 'NOME', 'P': 'POSIÇÃO', 'T': 'STATUS'}, inplace=True)
         
-        # Passando o dataframe diretamente sem usar o .style pesado
         st.dataframe(
             df_display, 
             width="stretch", 
-            height=620,
+            height=600,
             hide_index=True,
             column_config={
                 "PREÇO (€)": st.column_config.NumberColumn(format="€ %.1f")
