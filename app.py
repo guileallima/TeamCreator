@@ -178,17 +178,9 @@ def load_data_light():
         col_pos = col_map.get('POSITION', 'POSITION')
         col_ov = col_map.get('OVERALL', 'overall')
         col_price = col_map.get('MARKET PRICE', 'market price')
-        
-        col_club = col_map.get('CLUB TEAM', col_map.get('CLUB', col_map.get('CLUBE')))
 
-        rename_dict = {
-            col_id: 'INDEX', col_name: 'NAME', col_nat: 'NATIONALITY', 
-            col_age: 'AGE', col_pos: 'REG. POS.', col_ov: 'OVERALL'
-        }
-        if col_club:
-            rename_dict[col_club] = 'CLUB'
-
-        df.rename(columns=rename_dict, inplace=True)
+        df.rename(columns={col_id: 'INDEX', col_name: 'NAME', col_nat: 'NATIONALITY', 
+                           col_age: 'AGE', col_pos: 'REG. POS.', col_ov: 'OVERALL'}, inplace=True)
                            
         df['INDEX'] = df['INDEX'].astype(str).str.strip()
         
@@ -200,9 +192,6 @@ def load_data_light():
             
         if 'OVERALL' in df.columns:
             df.sort_values('OVERALL', ascending=False, inplace=True)
-            
-        if 'CLUB' not in df.columns:
-            df['CLUB'] = ""
         
         all_skill_cols = [t[0] for t in PLAYSTYLES.values()] + [t[0] for t in SKILLS.values()]
         for c in all_skill_cols:
@@ -225,13 +214,11 @@ def load_data_light():
         labels = {}
         for row in records:
             idade = int(row.get('AGE', 0)) if pd.notna(row.get('AGE')) else '?'
-            clube = str(row.get('CLUB', '')).strip()
-            clube_str = f" | 🏟️ {clube}" if clube and clube.lower() not in ['nan', 'none', ''] else ""
             nat = str(row.get('NATIONALITY', '?')).strip()
             pos = str(row.get('REG. POS.', '?')).strip()
             ov = row.get('OVERALL', '?')
             preco = float(row.get('MARKET PRICE', 0.0))
-            labels[str(row['INDEX'])] = f"{row.get('NAME', '?')}{clube_str} | {nat} | {pos} | Idade: {idade} | OV: {ov} | €{preco:.1f}"
+            labels[str(row['INDEX'])] = f"{row.get('NAME', '?')} | {nat} | {pos} | Idade: {idade} | OV: {ov} | €{preco:.1f}"
         
         data_ui["Labels"] = labels
         return data_ui
@@ -258,13 +245,6 @@ if br_str in lista_nacionalidades:
     lista_nacionalidades.remove(br_str)
 
 opcoes_nacionalidade = [br_str, "Todos"] + lista_nacionalidades
-
-lista_clubes = []
-if 'CLUB' in df_all.columns:
-    lista_clubes = df_all['CLUB'].dropna().astype(str).str.strip().unique().tolist()
-    lista_clubes = sorted([c for c in lista_clubes if c and c.lower() not in ['nan', 'none']])
-opcoes_clubes = ["Todos"] + lista_clubes
-
 opcoes_pos = list(POS_MAPPING.keys())
 opcoes_hab = list(PLAYSTYLES.keys()) + list(SKILLS.keys())
 
@@ -320,7 +300,6 @@ st.sidebar.subheader("🔍 Filtros de Jogadores")
 
 filtro_p = st.sidebar.number_input("Preço Máx. Filtro (€)", min_value=0.0, max_value=100000.0, value=50000.0, step=100.0, key="input_filter")
 filtro_pais = st.sidebar.selectbox("Nacionalidade", opcoes_nacionalidade, index=1, key="input_pais")
-filtro_clube = st.sidebar.selectbox("Clube", opcoes_clubes, index=0, key="input_clube")
 
 c_alt, c_vel = st.sidebar.columns(2)
 with c_alt: filtro_alt = st.number_input("Altura Mín. (cm)", min_value=100, max_value=220, value=150, step=5, key="input_alt")
@@ -330,14 +309,12 @@ pos_selecionadas = st.sidebar.multiselect("Posição (Linha)", opcoes_pos, place
 allowed_pos = []
 for p in pos_selecionadas: allowed_pos.extend(POS_MAPPING[p])
 
-hab_selecionadas = st.sidebar.multiselect("Cartinhas de skill (Max 10)", opcoes_hab, max_selections=10, placeholder="Selecione estilos/cartões...", key="ms_hab")
+hab_selecionadas = st.sidebar.multiselect("Características (Max 10)", opcoes_hab, max_selections=10, placeholder="Selecione estilos/cartões...", key="ms_hab")
 
 # --- LÓGICA DE FILTRAGEM GLOBAL ---
 mask_global = (df_all['MARKET PRICE'] <= filtro_p) & (df_all['HEIGHT'] >= filtro_alt) & (df_all['TOP SPEED'] >= filtro_vel)
 if filtro_pais != "Todos":
     mask_global &= (df_all['NATIONALITY'].astype(str).str.strip() == filtro_pais)
-if filtro_clube != "Todos":
-    mask_global &= (df_all['CLUB'].astype(str).str.strip() == filtro_clube)
 for hab in hab_selecionadas:
     col_hab = PLAYSTYLES[hab][0] if hab in PLAYSTYLES else SKILLS[hab][0]
     mask_global &= (df_all[col_hab] == 1)
@@ -610,7 +587,7 @@ with tab_resumo:
                         title = f"🟦 {cat} 🟦"
                         
                     final_table_data.append({
-                        'Nº': sep_char, 'NOME': title, 'CLUBE': sep_char, 'POSIÇÃO': sep_char,
+                        'Nº': sep_char, 'NOME': title, 'POSIÇÃO': sep_char,
                         'IDADE': sep_char, 'ALTURA': sep_char, 'OVERALL': sep_char,
                         'CARTAS': sep_char, 'PREÇO (€)': sep_char, 'STATUS': sep_char
                     })
@@ -630,7 +607,6 @@ with tab_resumo:
             final_table_data.append({
                 'Nº': num_str,
                 'NOME': str(p.get('NAME', '')),
-                'CLUBE': str(p.get('CLUB', '')),
                 'POSIÇÃO': str(p.get('P', '')),
                 'IDADE': str(int(get_num_stat(p, 'AGE'))),
                 'ALTURA': f"{int(get_num_stat(p, 'HEIGHT'))}cm",
@@ -683,8 +659,7 @@ if st.button("✅ ENVIAR INSCRIÇÃO", type="primary", width="stretch", disabled
                     num_raw = st.session_state.numeros.get(p['K'], None)
                     str_num = str(int(num_raw)) if num_raw is not None else ""
                     preco = p.get('MARKET PRICE', 0.0)
-                    clube_txt = f"[{p.get('CLUB', 'Sem Clube')}]" if p.get('CLUB') else ""
-                    txt_content += f"ID: {p['INDEX']} | Nº: {str_num} | {p['NAME']} {clube_txt} | Preço: €{preco:.1f}\n"
+                    txt_content += f"ID: {p['INDEX']} | Nº: {str_num} | {p['NAME']} | Preço: €{preco:.1f}\n"
             
             txt_content += "\n--- RESERVAS ---\n"
             for p in lista:
@@ -692,8 +667,7 @@ if st.button("✅ ENVIAR INSCRIÇÃO", type="primary", width="stretch", disabled
                     num_raw = st.session_state.numeros.get(p['K'], None)
                     str_num = str(int(num_raw)) if num_raw is not None else ""
                     preco = p.get('MARKET PRICE', 0.0)
-                    clube_txt = f"[{p.get('CLUB', 'Sem Clube')}]" if p.get('CLUB') else ""
-                    txt_content += f"ID: {p['INDEX']} | Nº: {str_num} | {p['NAME']} {clube_txt} | Preço: €{preco:.1f}\n"
+                    txt_content += f"ID: {p['INDEX']} | Nº: {str_num} | {p['NAME']} | Preço: €{preco:.1f}\n"
 
             # 2. GERAÇÃO DO PDF VISUAL
             pdf = FPDF()
@@ -848,7 +822,8 @@ if st.button("✅ ENVIAR INSCRIÇÃO", type="primary", width="stretch", disabled
 
             # ENVIO DO EMAIL
             msg = MIMEMultipart()
-            msg['From'], msg['To'] = EMAIL_REMETENTE, msg['To'] = EMAIL_DESTINO
+            msg['From'] = EMAIL_REMETENTE
+            msg['To'] = EMAIL_DESTINO
             msg['Subject'] = f"Inscrição: {nome_time}"
             msg.attach(MIMEText(f"Nova inscrição recebida.\nTime: {nome_time}", 'plain'))
             
